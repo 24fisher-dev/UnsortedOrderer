@@ -26,11 +26,19 @@ internal sealed class CleanupForm : Form
     private readonly Button _restart = new() { Text = "Новая очистка", AutoSize = true };
     private readonly Button _exit = new() { Text = "Выход", AutoSize = true };
     private readonly System.Windows.Forms.Timer _logTimer = new() { Interval = 150 };
+    private readonly Icon? _applicationIcon;
     private bool _running;
 
     public CleanupForm(AppSettings settings)
     {
         _settings = settings;
+        using var iconResource = typeof(CleanupForm).Assembly.GetManifestResourceStream("UnsortedOrderer.ApplicationIcon");
+        if (iconResource is not null)
+        {
+            _applicationIcon = new Icon(iconResource);
+            Icon = _applicationIcon;
+        }
+
         Text = "UnsortedOrderer — очистка и сортировка";
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(720, 520);
@@ -201,5 +209,9 @@ internal sealed class CleanupForm : Form
             _logTimer.Dispose();
         }
         base.Dispose(disposing);
+        if (disposing)
+        {
+            _applicationIcon?.Dispose();
+        }
     }
 }

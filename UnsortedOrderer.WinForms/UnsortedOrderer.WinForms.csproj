@@ -5,6 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>UnsortedOrderer</AssemblyName>
+    <ApplicationIcon>Assets/UnsortedOrderer.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -37,6 +38,7 @@
     <ProjectReference Include="..\UnsortedOrderer.Application\UnsortedOrderer.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="$(ApplicationIcon)" LogicalName="UnsortedOrderer.ApplicationIcon" />
     <EmbeddedResource Include="appsettings.json" LogicalName="UnsortedOrderer.DefaultSettings" />
   </ItemGroup>
   <Target Name="NameStandaloneExecutable" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true'">

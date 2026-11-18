@@ -71,6 +71,7 @@ public static class ServiceCollectionExtensions
                 new GraphicsCategory(appSettings.GraphicsFolderName),
                 new VideosCategory(cameraFileNamePatternService, videoDateService, messengerPathService),
                 new ThreeDModelsCategory(),
+                new ThreeDPrintingCategory(),
                 new ArchivesCategory(appSettings.ArchiveFolderName),
                 new CertificatesCategory(),
                 new RepositoriesCategory(appSettings.RepositoriesFolderName, repositoryDetector),

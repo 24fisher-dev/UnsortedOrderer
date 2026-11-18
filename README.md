@@ -22,6 +22,8 @@ Standalone Windows Forms application for organizing a folder full of unsorted fi
 - Large photos (including RAW) are moved to `PhotosFolderName` with a year/month breakdown determined from EXIF or file creation date. If EXIF dates are earlier than 1980, the file creation date is used instead.
 - Small images (icons, previews, logos) go to the `images` subfolder inside `ImagesFolderName` without date breakdown. Size is determined by resolution (up to 512 px on the longer side) and file size (up to ~300 KB for small images).
 - Documents, videos, 3D models, archives, digital certificates, firmware files, metadata, and software are sent to dedicated folders.
+- STL, 3MF, G-code and binary G-code go to `3Дпечать/<year>/<month>` using the file creation date (last modified date if creation is older than 1980). Recognized Bambu Studio and OrcaSlicer filament preset JSONs follow the same rule. Other JSONs, including printer and process presets, keep their existing routing. Generic 3D formats such as OBJ and STEP still go to `3DModels`.
+- OpenDocument spreadsheets and presentations (`.ods`, `.odp`), Aseprite projects (`.aseprite`), and archives (`.tgz`, `.zst`) are recognized.
 - HTML files and browser shortcuts (`.html`, `.htm`, `.xhtml`, `.mhtml`, `.mht`, `.url`, `.webloc`, `.website`) move to `WebFolderName`.
 - Graphics editor project files (for example, `.psd`, `.psb`, `.ai`, `.eps`, `.xcf`, `.kra`, `.ora`, `.clip`, `.afphoto`, `.afdesign`, `.afpub`, `.cdr`, `.sai`, `.mdp`, `.pdn`, `.pspimage`, `.reb`, `.sketch`, `.fig`) move to `GraphicsFolderName`.
 - E-books (`.epub`, `.fb2`, `.mobi`, `.azw3`, `.djvu`, `.cbr`, `.cbz`, `.ibooks`, `.kfx`) move to the `EBooksFolderName` folder.
@@ -32,7 +34,7 @@ Standalone Windows Forms application for organizing a folder full of unsorted fi
 - Repositories and source folders are moved whole into `RepositoriesFolderName` without per-file sorting. Detection reacts to `.git`, common manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, etc.), or the presence of several source files (`.cs`, `.ts`, `.js`, `.py`, `.java`, `.cpp`, `.rs`, and more).
 - Music album directories that contain only audio files, album artwork images, and optional track lists are moved intact into `MusicFolderName` even if they include hidden files like `thumbs.db`.
 - When a repository folder is wrapped in one or more parent directories (for example, after extracting an archive), the sorter unwraps those shells and moves only the repository directory itself into `RepositoriesFolderName`.
-- The list of extensions to delete is defined in `appsettings.json` (by default `.lnk`, `.torrent`, `.tmp`, `.ini`).
+- The list of extensions to delete is defined in `appsettings.json`. Incomplete Chromium downloads (`.crdownload`) are also deleted, including with older custom settings.
 - Installer directories are detected separately and moved intact into the software folder without unpacking.
 - Device firmware directories (with documentation and helper files) are moved intact into `FirmwareFolderName`.
 - When an archive name matches an already moved software folder, the folder is removed and the archive is placed in its spot.
@@ -43,7 +45,7 @@ Standalone Windows Forms application for organizing a folder full of unsorted fi
 
 - Download the latest `UnsortedOrderer_v*.exe` from [GitHub Releases](https://github.com/24fisher-dev/UnsortedOrderer/releases/latest) and launch it on Windows x64. No installer or separate .NET installation is required.
 - The window shows the source and destination folders and lists the configured extensions that will be deleted.
-- The optional checkboxes import the contents of Desktop and Downloads into the source before sorting. They start unchecked. Desktop import is available when the app is run from the desktop or a folder inside it. Downloads import is unavailable if that folder does not exist or is already the source.
+- The optional checkboxes import the contents of Desktop and Downloads into the source before sorting. They start unchecked. Desktop import is available when the app is run from the desktop or a folder inside it. The running executable and its settings stay in place, and folders containing the running app are not moved. Old executables elsewhere on the desktop are sorted normally. Downloads import is unavailable if that folder does not exist or is already the source.
 - Click **Начать очистку** to start. The window stays responsive and shows the current stage and journal. When finished or stopped by an error, click **Новая очистка** to return to the options or **Выход** to quit.
 
 A successful build from `main` publishes the tested executable in GitHub Releases. The release tag and executable use the same version. Pull requests do not publish releases.

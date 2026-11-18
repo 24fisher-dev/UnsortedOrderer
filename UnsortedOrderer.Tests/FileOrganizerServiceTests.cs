@@ -137,8 +137,10 @@ public partial class FileOrganizerServiceTests
         Assert.False(Directory.Exists(albumDirectory));
     }
 
-    [Fact]
-    public void ArchiveFollowsSiblingCategory_WhenSiblingIsMovedFirst()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ArchiveFollowsPrintingModel_InEitherProcessingOrder(bool archiveFirst)
     {
         using var source = new TempDirectory();
         using var destination = new TempDirectory();
@@ -148,6 +150,7 @@ public partial class FileOrganizerServiceTests
 
         File.WriteAllText(stlPath, "dummy-stl");
         File.WriteAllText(archivePath, "dummy-zip");
+        var date = File.GetCreationTime(stlPath);
 
         var settings = new AppSettings(
             source.Path,
@@ -173,7 +176,7 @@ public partial class FileOrganizerServiceTests
 
         var categories = new ICategory[]
         {
-            new ThreeDModelsCategory(),
+            new ThreeDPrintingCategory(),
             new ArchivesCategory(settings.ArchiveFolderName),
             new UnknownCategory(settings.UnknownFolderName)
         };
@@ -190,10 +193,10 @@ public partial class FileOrganizerServiceTests
             statistics,
             new StubMessageWriter());
 
-        InvokeProcessFile(organizer, stlPath);
-        InvokeProcessFile(organizer, archivePath);
+        InvokeProcessFile(organizer, archiveFirst ? archivePath : stlPath);
+        InvokeProcessFile(organizer, archiveFirst ? stlPath : archivePath);
 
-        var threeDModelsDirectory = System.IO.Path.Combine(destination.Path, "3DModels");
+        var threeDModelsDirectory = System.IO.Path.Combine(destination.Path, "3Дпечать", date.Year.ToString("D4"), date.Month.ToString("D2"));
         var movedModel = System.IO.Path.Combine(threeDModelsDirectory, "oneup plug.stl");
         var movedArchive = System.IO.Path.Combine(threeDModelsDirectory, "oneup plug.zip");
 

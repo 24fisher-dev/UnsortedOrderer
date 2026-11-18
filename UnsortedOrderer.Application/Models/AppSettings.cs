@@ -40,7 +40,7 @@ public sealed class AppSettings
         WebFolderName = webFolderName;
         GraphicsFolderName = graphicsFolderName;
         UnknownFolderName = unknownFolderName;
-        DeletedExtensions = deletedExtensions;
+        DeletedExtensions = deletedExtensions.Append(".crdownload").Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         DocumentImageKeywords = documentImageKeywords;
         CameraFileNamePatterns = cameraFileNamePatterns;
         SoftwareArchiveKeywords = softwareArchiveKeywords;
