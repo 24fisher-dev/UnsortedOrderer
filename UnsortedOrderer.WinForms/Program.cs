@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using UnsortedOrderer.Infrastructure.Mappers;
 using UnsortedOrderer.Models;
@@ -20,7 +21,12 @@ internal static class Program
                     ?? throw new InvalidOperationException("Встроенные настройки не найдены.");
             var configuration = new ConfigurationBuilder().AddJsonStream(configStream).Build();
             var settings = AppSettingsMapper.Map(configuration.Get<AppSettingsDto>() ?? new AppSettingsDto());
-            System.Windows.Forms.Application.Run(new CleanupForm(settings));
+            var assembly = typeof(Program).Assembly;
+            var fileVersion = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version;
+            var currentVersion = Version.TryParse(fileVersion, out var version)
+                ? version
+                : assembly.GetName().Version ?? new Version(0, 0, 0, 0);
+            System.Windows.Forms.Application.Run(new CleanupForm(settings, currentVersion));
         }
         catch (Exception exception)
         {

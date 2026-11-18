@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using UnsortedOrderer.Infrastructure.Updates;
 using UnsortedOrderer.Application.Application;
 using UnsortedOrderer.Application.DependencyInjection;
 using UnsortedOrderer.Contracts.Services;
@@ -22,6 +23,8 @@ internal sealed class CleanupForm : Form
         ReadOnly = true,
         ScrollBars = ScrollBars.Vertical
     };
+    private readonly LinkLabel _updateLink = new() { AutoSize = true, Visible = false };
+    private readonly CancellationTokenSource _updateCancellation = new();
     private readonly Button _start = new() { Text = "Начать очистку", AutoSize = true };
     private readonly Button _restart = new() { Text = "Новая очистка", AutoSize = true };
     private readonly Button _exit = new() { Text = "Выход", AutoSize = true };
@@ -29,7 +32,7 @@ internal sealed class CleanupForm : Form
     private readonly Icon? _applicationIcon;
     private bool _running;
 
-    public CleanupForm(AppSettings settings)
+    public CleanupForm(AppSettings settings, Version currentVersion)
     {
         _settings = settings;
         using var iconResource = typeof(CleanupForm).Assembly.GetManifestResourceStream("UnsortedOrderer.ApplicationIcon");
@@ -39,7 +42,7 @@ internal sealed class CleanupForm : Form
             Icon = _applicationIcon;
         }
 
-        Text = "UnsortedOrderer — очистка и сортировка";
+        Text = $"UnsortedOrderer v{currentVersion} — очистка и сортировка";
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(720, 520);
         MinimumSize = new Size(610, 410);
@@ -72,20 +75,22 @@ internal sealed class CleanupForm : Form
 
         var layout = new TableLayoutPanel
         {
-            ColumnCount = 1, RowCount = 8, Dock = DockStyle.Fill, Padding = new Padding(14)
+            ColumnCount = 1, RowCount = 9, Dock = DockStyle.Fill, Padding = new Padding(14)
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var row = 0; row < layout.RowCount; row++)
         {
-            layout.RowStyles.Add(row == 6 ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(row == 7 ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
         }
-        Control[] controls = [paths, _desktop, _downloads, warning, _status, _progress, _journal, buttons];
+        Control[] controls = [_updateLink, paths, _desktop, _downloads, warning, _status, _progress, _journal, buttons];
         for (var row = 0; row < controls.Length; row++)
         {
             layout.Controls.Add(controls[row], 0, row);
         }
         Controls.Add(layout);
 
+        Shown += async (_, _) => await UpdateNotification.CheckAndShowAsync(
+            _updateLink, currentVersion, _updateCancellation.Token);
         _start.Click += async (_, _) => await StartCleanupAsync();
         _restart.Click += (_, _) => ResetForm();
         _exit.Click += (_, _) => Close();
@@ -158,9 +163,10 @@ internal sealed class CleanupForm : Form
 
     private void ResetForm()
     {
-        _desktop.Checked = _downloads.Checked = false;
         _desktop.Enabled = new Services.DesktopCleanupService(_log).CanClean(_settings.SourceDirectory);
         _downloads.Enabled = new Services.DownloadsCleanupService(_log).CanClean(_settings.SourceDirectory);
+        _desktop.Checked = _desktop.Enabled;
+        _downloads.Checked = _downloads.Enabled;
         _desktop.Text = _desktop.Enabled
             ? "Перенести содержимое рабочего стола на сортировку"
             : "Рабочий стол — доступно при запуске программы с рабочего стола";
@@ -204,8 +210,10 @@ internal sealed class CleanupForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !IsDisposed)
         {
+            _updateCancellation.Cancel();
+            _updateCancellation.Dispose();
             _logTimer.Dispose();
         }
         base.Dispose(disposing);

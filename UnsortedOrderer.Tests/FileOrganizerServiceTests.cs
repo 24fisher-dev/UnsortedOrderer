@@ -153,7 +153,7 @@ public partial class FileOrganizerServiceTests
         File.WriteAllText(stlPath, "dummy-stl");
         File.WriteAllText(archivePath, "dummy-zip");
         var date = File.GetCreationTime(stlPath);
-        var printingRoot = Path.Combine(destination.Path, "3Дпечать");
+        var printingRoot = Path.Combine(destination.Path, "3DPrinting");
         var monthFolder = Path.Combine(printingRoot, date.Year.ToString("D4"), date.Month.ToString("D2"));
         var olderDate = date.AddMonths(-1);
         var previousMonthFolder = Path.Combine(printingRoot, olderDate.Year.ToString("D4"), olderDate.Month.ToString("D2"));
