@@ -1,6 +1,6 @@
 # UnsortedOrderer
 
-.NET 8 console application for organizing a folder full of unsorted files. Configuration lives in `UnsortedOrderer.ConsoleApp/appsettings.json` (defaults point to `C:/_Unsorted` as the source and `C:/_Sorted` as the destination).
+Standalone Windows Forms application for organizing a folder full of unsorted files. The published executable includes .NET and the default configuration. The default source is `C:/_Unsorted` and the destination is `C:/_Sorted`. To use custom settings, put a complete `appsettings.json` next to the executable. A full example is available in [UnsortedOrderer.WinForms/appsettings.json](UnsortedOrderer.WinForms/appsettings.json).
 
 ## Configuration
 
@@ -39,9 +39,21 @@
 - When an archive shares the first half of its name with an unarchived file or folder in the same source directory, the archive is moved to that item's destination category so it ends up beside it.
 - Empty directories are removed after processing.
 
-Run the app from the repository root with `dotnet run --project UnsortedOrderer.ConsoleApp/UnsortedOrderer.ConsoleApp.csproj` after verifying paths in `appsettings.json` are correct.
+## Run and publish
 
-## Startup prompts
+- Launch the published `UnsortedOrderer_v*.exe` on Windows x64. No installer or separate .NET installation is required.
+- The window shows the source and destination folders and lists the configured extensions that will be deleted.
+- The optional checkboxes import the contents of Desktop and Downloads into the source before sorting. They start unchecked. Desktop import is available when the app is run from the desktop or a folder inside it. Downloads import is unavailable if that folder does not exist or is already the source.
+- Click **Начать очистку** to start. The window stays responsive and shows the current stage and journal. When finished or stopped by an error, click **Новая очистка** to return to the options or **Выход** to quit.
 
-- If you launch the app from the Windows desktop, it offers to move everything (except program shortcuts, the running executable, and `appsettings.json`) into the configured source directory before starting.
-- On startup, the app can also move every file from the current user's Windows Downloads folder into the source directory for sorting if you confirm the prompt.
+To run from source on Windows:
+
+```powershell
+dotnet run --project UnsortedOrderer.WinForms
+```
+
+To publish a single self-contained executable:
+
+```powershell
+dotnet publish UnsortedOrderer.WinForms -c Release -r win-x64 -p:PublishProfile=FolderProfile -o out
+```

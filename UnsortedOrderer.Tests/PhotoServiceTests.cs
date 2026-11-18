@@ -131,10 +131,11 @@ public class PhotoServiceTests
     }
 
     [Theory]
-    [InlineData(".png", ImageFormat.Png)]
-    [InlineData(".gif", ImageFormat.Gif)]
-    public void IsPhoto_returns_false_for_large_png_and_gif(string extension, ImageFormat format)
+    [InlineData(".png")]
+    [InlineData(".gif")]
+    public void IsPhoto_returns_false_for_large_png_and_gif(string extension)
     {
+        var format = extension == ".png" ? ImageFormat.Png : ImageFormat.Gif;
         using var tempDirectory = new TempDirectory();
         var metadataService = new StubPhotoCameraMetadataService(null);
         var patternService = new StubCameraPatternService(CameraMediaType.Photo, null);

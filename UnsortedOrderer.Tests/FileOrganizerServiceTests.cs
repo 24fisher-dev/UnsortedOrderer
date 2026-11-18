@@ -28,7 +28,10 @@ public partial class FileOrganizerServiceTests
 
         Directory.CreateDirectory(repositoryRoot);
         Directory.CreateDirectory(System.IO.Path.Combine(repositoryRoot, ".git"));
+        // A wrapper must meet the recursive code threshold to be recognized before traversal.
         File.WriteAllText(System.IO.Path.Combine(repositoryRoot, "Program.cs"), "class Program { }");
+        File.WriteAllText(System.IO.Path.Combine(repositoryRoot, "Input.cs"), "class Input { }");
+        File.WriteAllText(System.IO.Path.Combine(repositoryRoot, "Output.cs"), "class Output { }");
 
         var settings = new AppSettings(
             source.Path,
@@ -54,7 +57,7 @@ public partial class FileOrganizerServiceTests
 
         var categories = new ICategory[]
         {
-            new RepositoriesCategory(settings.RepositoriesFolderName),
+            new RepositoriesCategory(settings.RepositoriesFolderName, new RepositoriesService(RepositoriesCategory.CodeExtensions)),
             new UnknownCategory(settings.UnknownFolderName)
         };
 
@@ -64,6 +67,7 @@ public partial class FileOrganizerServiceTests
             new StubPhotoService(isPhoto: false),
             new StubMessengerPathService(),
             categories,
+            Array.Empty<ICategoryParsingService>(),
             new RecordingStatisticsService(),
             new StubMessageWriter());
 
@@ -122,6 +126,7 @@ public partial class FileOrganizerServiceTests
             new StubPhotoService(isPhoto: false),
             new StubMessengerPathService(),
             categories,
+            Array.Empty<ICategoryParsingService>(),
             new RecordingStatisticsService(),
             new StubMessageWriter());
 
@@ -181,6 +186,7 @@ public partial class FileOrganizerServiceTests
             new StubPhotoService(isPhoto: false),
             new StubMessengerPathService(),
             categories,
+            Array.Empty<ICategoryParsingService>(),
             statistics,
             new StubMessageWriter());
 
@@ -243,6 +249,7 @@ public partial class FileOrganizerServiceTests
             new StubPhotoService(isPhoto: false),
             new StubMessengerPathService(),
             categories,
+            Array.Empty<ICategoryParsingService>(),
             statistics,
             new StubMessageWriter());
 

@@ -10,15 +10,41 @@ public sealed class FileOrganizerApplication
     private readonly FileOrganizerService _organizer;
     private readonly IMessageWriter _messageWriter;
 
-    public FileOrganizerApplication(AppSettings settings, FileOrganizerService organizer, IMessageWriter messageWriter)
+    private readonly IDesktopCleanupService _desktop;
+    private readonly IDownloadsCleanupService _downloads;
+
+    public FileOrganizerApplication(
+        AppSettings settings,
+        FileOrganizerService organizer,
+        IMessageWriter messageWriter,
+        IDesktopCleanupService desktop,
+        IDownloadsCleanupService downloads)
     {
         _settings = settings;
         _organizer = organizer;
         _messageWriter = messageWriter;
+        _desktop = desktop;
+        _downloads = downloads;
     }
 
-    public void Run()
+    public void Run(
+        bool cleanDesktop = false,
+        bool cleanDownloads = false,
+        Action<CleanupStage>? onStage = null)
     {
+        if (cleanDesktop && _desktop.CanClean(_settings.SourceDirectory))
+        {
+            onStage?.Invoke(CleanupStage.Desktop);
+            _desktop.Clean(_settings.SourceDirectory);
+        }
+
+        if (cleanDownloads && _downloads.CanClean(_settings.SourceDirectory))
+        {
+            onStage?.Invoke(CleanupStage.Downloads);
+            _downloads.Clean(_settings.SourceDirectory);
+        }
+
+        onStage?.Invoke(CleanupStage.Sorting);
         var deletionExtensions = FileUtilities
             .NormalizeExtensions(_settings.DeletedExtensions)
             .Distinct(StringComparer.OrdinalIgnoreCase)
