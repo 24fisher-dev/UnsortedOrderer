@@ -138,9 +138,11 @@ public partial class FileOrganizerServiceTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ArchiveFollowsPrintingModel_InEitherProcessingOrder(bool archiveFirst)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ArchiveFollowsPrintingModel_WithoutOverwritingOtherArchives(bool archiveFirst, bool sameMonthCollision)
     {
         using var source = new TempDirectory();
         using var destination = new TempDirectory();
@@ -151,6 +153,21 @@ public partial class FileOrganizerServiceTests
         File.WriteAllText(stlPath, "dummy-stl");
         File.WriteAllText(archivePath, "dummy-zip");
         var date = File.GetCreationTime(stlPath);
+        var printingRoot = Path.Combine(destination.Path, "3Дпечать");
+        var monthFolder = Path.Combine(printingRoot, date.Year.ToString("D4"), date.Month.ToString("D2"));
+        var olderDate = date.AddMonths(-1);
+        var previousMonthFolder = Path.Combine(printingRoot, olderDate.Year.ToString("D4"), olderDate.Month.ToString("D2"));
+        Directory.CreateDirectory(previousMonthFolder);
+        var oldArchive = Path.Combine(previousMonthFolder, "oneup plug.zip");
+        File.WriteAllText(oldArchive, "previous archive");
+        File.WriteAllText(Path.Combine(previousMonthFolder, "oneup plug.stl"), "previous model");
+        var existingCurrentArchive = Path.Combine(monthFolder, "oneup plug.zip");
+        if (sameMonthCollision)
+        {
+            Directory.CreateDirectory(monthFolder);
+            File.WriteAllText(existingCurrentArchive, "current existing archive");
+        }
+
 
         var settings = new AppSettings(
             source.Path,
@@ -196,12 +213,16 @@ public partial class FileOrganizerServiceTests
         InvokeProcessFile(organizer, archiveFirst ? archivePath : stlPath);
         InvokeProcessFile(organizer, archiveFirst ? stlPath : archivePath);
 
-        var threeDModelsDirectory = System.IO.Path.Combine(destination.Path, "3Дпечать", date.Year.ToString("D4"), date.Month.ToString("D2"));
-        var movedModel = System.IO.Path.Combine(threeDModelsDirectory, "oneup plug.stl");
-        var movedArchive = System.IO.Path.Combine(threeDModelsDirectory, "oneup plug.zip");
+        var movedModel = Path.Combine(monthFolder, "oneup plug.stl");
+        var movedArchive = Path.Combine(monthFolder, sameMonthCollision ? "oneup plug(1).zip" : "oneup plug.zip");
 
-        Assert.True(File.Exists(movedModel));
-        Assert.True(File.Exists(movedArchive));
+        Assert.Equal("dummy-stl", File.ReadAllText(movedModel));
+        Assert.Equal("dummy-zip", File.ReadAllText(movedArchive));
+        Assert.Equal("previous archive", File.ReadAllText(oldArchive));
+        if (sameMonthCollision)
+        {
+            Assert.Equal("current existing archive", File.ReadAllText(existingCurrentArchive));
+        }
     }
 
     [Fact]
@@ -284,6 +305,8 @@ public partial class FileOrganizerServiceTests
 
     private sealed class StubArchiveService : IArchiveService
     {
+        public void RecordPrintingFileMove(string sourcePath, string destinationDirectory) { }
+
         public ArchiveHandlingResult HandleArchiveFile(string archivePath, string categoryName)
         {
             var destinationDirectory = Path.Combine(

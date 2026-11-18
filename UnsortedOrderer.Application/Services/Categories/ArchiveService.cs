@@ -6,6 +6,7 @@ using UnsortedOrderer.Categories;
 using UnsortedOrderer.Contracts.Categories;
 using UnsortedOrderer.Contracts.Services;
 using UnsortedOrderer.Models;
+using UnsortedOrderer.Services;
 
 namespace UnsortedOrderer.Application.Services.Categories;
 
@@ -16,6 +17,9 @@ public sealed class ArchiveService : IArchiveService
     private readonly IReadOnlyCollection<INonSplittableDirectoryCategory> _nonSplittableCategories;
     private readonly IStatisticsService _statisticsService;
     private readonly string[] _softwareArchiveKeywords;
+    private readonly ThreeDPrintingCategory? _printingCategory;
+    private readonly Dictionary<string, List<PrintingFileMove>> _printingMovesBySourceDirectory =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     public ArchiveService(
         AppSettings settings,
@@ -24,6 +28,7 @@ public sealed class ArchiveService : IArchiveService
     {
         _settings = settings;
         _categories = categories.ToArray();
+        _printingCategory = _categories.OfType<ThreeDPrintingCategory>().FirstOrDefault();
         _nonSplittableCategories = _categories
             .OfType<INonSplittableDirectoryCategory>()
             .ToArray();
@@ -33,29 +38,67 @@ public sealed class ArchiveService : IArchiveService
 
     public ArchiveHandlingResult HandleArchiveFile(string filePath, string categoryName)
     {
-        RemoveExistingDistributionDirectory(filePath);
-
         if (IsSoftwareArchive(filePath))
         {
+            RemoveExistingDistributionDirectory(filePath);
             var softArchiveDestination = Path.Combine(_settings.DestinationRoot, _settings.SoftFolderName);
             var movedArchive = HandleArchive(filePath, softArchiveDestination);
             return new ArchiveHandlingResult(movedArchive, _settings.SoftFolderName);
         }
 
-        if (FindMatchingSibling(filePath) is { } matching)
+        var sibling = FindMatchingSibling(filePath);
+        if (_printingCategory is not null)
         {
-            var matchingCategory = matching.Category;
-            var matchingDestinationDirectory = matchingCategory is ThreeDPrintingCategory printing
-                ? printing.GetDestinationDirectory(_settings.DestinationRoot, matching.Path)
-                : Path.Combine(_settings.DestinationRoot, matchingCategory.FolderName);
+            var printingDestination = sibling?.Category is ThreeDPrintingCategory
+                ? _printingCategory.GetDestinationDirectory(_settings.DestinationRoot, sibling.Value.Path)
+                : FindMovedPrintingSiblingDirectory(filePath);
+            if (printingDestination is not null)
+            {
+                // A sibling from this run takes precedence over old same-named files in the destination.
+                var archive = FileUtilities.MoveFile(filePath, printingDestination);
+                return new ArchiveHandlingResult(archive, _printingCategory.FolderName);
+            }
+        }
+
+        RemoveExistingDistributionDirectory(filePath);
+        if (sibling is { } matching)
+        {
+            var matchingDestinationDirectory = Path.Combine(_settings.DestinationRoot, matching.Category.FolderName);
             var matchingArchiveDestination = HandleArchive(filePath, matchingDestinationDirectory);
-            return new ArchiveHandlingResult(matchingArchiveDestination, matchingCategory.FolderName);
+            return new ArchiveHandlingResult(matchingArchiveDestination, matching.Category.FolderName);
         }
 
         var archiveDestinationDirectory = Path.Combine(_settings.DestinationRoot, _settings.ArchiveFolderName);
         var archiveDestination = HandleArchive(filePath, archiveDestinationDirectory);
         return new ArchiveHandlingResult(archiveDestination, categoryName);
     }
+
+    public void RecordPrintingFileMove(string sourcePath, string destinationDirectory)
+    {
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
+        if (!_printingMovesBySourceDirectory.TryGetValue(sourceDirectory, out var moves))
+        {
+            moves = [];
+            _printingMovesBySourceDirectory.Add(sourceDirectory, moves);
+        }
+
+        moves.Add(new PrintingFileMove(Path.GetFileNameWithoutExtension(sourcePath), destinationDirectory));
+    }
+
+    private string? FindMovedPrintingSiblingDirectory(string archivePath)
+    {
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(archivePath))!;
+        if (!_printingMovesBySourceDirectory.TryGetValue(sourceDirectory, out var moves))
+        {
+            return null;
+        }
+
+        var archiveStem = Path.GetFileNameWithoutExtension(archivePath);
+        return (moves.Find(move => string.Equals(archiveStem, move.Stem, StringComparison.OrdinalIgnoreCase))
+            ?? moves.Find(move => IsHalfNameMatch(archiveStem, move.Stem)))?.DestinationDirectory;
+    }
+
+    private sealed record PrintingFileMove(string Stem, string DestinationDirectory);
 
     public string HandleArchive(string archivePath, string destinationDirectory)
     {
