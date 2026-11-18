@@ -154,6 +154,29 @@ public sealed class CleanupRunTests : IDisposable
         Assert.True(File.Exists(Path.Combine(Destination, folder, name)));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Organizing_a_source_containing_the_app_keeps_only_the_running_installation(bool nested)
+    {
+        var relativeDirectory = nested ? Path.Combine("portable", "current") : "";
+        var app = WriteInput(Path.Combine(relativeDirectory, "Renamed release.exe"), "running");
+        var config = WriteInput(Path.Combine(relativeDirectory, "appsettings.json"), "{}");
+        var old = WriteInput("UnsortedOrderer.Console.exe", "old version");
+        var additionalInput = WriteInput(Path.Combine("portable-old", "manual.txt"), "manual");
+        var location = new ApplicationLocation(Path.GetDirectoryName(app)!, app);
+        using var provider = BuildRun(new CleanupStub("desktop.txt"), new CleanupStub("download.txt"), new Log(), location);
+
+        provider.GetRequiredService<FileOrganizerApplication>().Run();
+
+        Assert.Equal("running", File.ReadAllText(app));
+        Assert.Equal("{}", File.ReadAllText(config));
+        Assert.True(HasSortedFile("UnsortedOrderer.Console.exe"));
+        Assert.True(HasSortedFile("manual.txt"));
+        Assert.False(File.Exists(old));
+        Assert.False(File.Exists(additionalInput));
+    }
+
     private string WriteInput(string name, string contents)
     {
         var path = Path.Combine(Source, name);
@@ -171,9 +194,11 @@ public sealed class CleanupRunTests : IDisposable
     private bool HasSortedFile(string name) =>
         Directory.EnumerateFiles(Destination, name, SearchOption.AllDirectories).Any();
 
-    private ServiceProvider BuildRun(IDesktopCleanupService desktop, IDownloadsCleanupService downloads, Log log) =>
+    private ServiceProvider BuildRun(IDesktopCleanupService desktop, IDownloadsCleanupService downloads, Log log,
+        ApplicationLocation? application = null) =>
         new ServiceCollection()
             .AddSingleton<IMessageWriter>(log)
+            .AddSingleton(application ?? ApplicationLocation.Current)
             .AddUnsortedOrdererApplication(new AppSettings(Source, Destination, "Soft", "Archives",
                 "Images", "Photos", "Music", "Instruments", "EBooks", "Repositories", "Drivers", "Firmware",
                 "Metadata", "Web", "Graphics", "Unknown", [], [], [], []))

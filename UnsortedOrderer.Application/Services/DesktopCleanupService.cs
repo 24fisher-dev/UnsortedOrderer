@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnsortedOrderer.Contracts.Services;
+using UnsortedOrderer.Models;
 
 namespace UnsortedOrderer.Services;
 
@@ -13,17 +14,29 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
 
     private readonly IMessageWriter _messageWriter;
 
+    private readonly string _desktopPath;
+    private readonly ApplicationLocation _application;
+
     public DesktopCleanupService(IMessageWriter messageWriter)
+        : this(messageWriter, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            ApplicationLocation.Current)
+    {
+    }
+
+    public DesktopCleanupService(IMessageWriter messageWriter, string desktopPath, ApplicationLocation application)
     {
         _messageWriter = messageWriter;
+        _desktopPath = desktopPath;
+        _application = application;
     }
 
     public bool CanClean(string destinationPath)
     {
-        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        var desktopPath = _desktopPath;
         return !string.IsNullOrWhiteSpace(destinationPath)
             && Directory.Exists(desktopPath)
-            && IsRunningFromDesktop(NormalizePath(desktopPath), NormalizePath(AppContext.BaseDirectory));
+            && !ApplicationLocation.SamePath(desktopPath, destinationPath)
+            && _application.IsInside(desktopPath);
     }
 
     public void Clean(string destinationPath)
@@ -33,20 +46,14 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
             return;
         }
 
-        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        var normalizedAppPath = NormalizePath(AppContext.BaseDirectory);
+        var desktopPath = _desktopPath;
         Directory.CreateDirectory(destinationPath);
-        var currentProcessPath = Environment.ProcessPath;
-        var normalizedAppSettingsPath = NormalizePath(Path.Combine(normalizedAppPath, "appsettings.json"));
 
         foreach (var entry in new DirectoryInfo(desktopPath).EnumerateFileSystemInfos())
         {
-            var normalizedEntryPath = NormalizePath(entry.FullName);
-
-            if (IsShortcut(entry) ||
-                IsCurrentProcess(normalizedEntryPath, currentProcessPath) ||
-                IsAppSettings(normalizedEntryPath, normalizedAppSettingsPath) ||
-                IsAppBaseDirectory(normalizedEntryPath, normalizedAppPath))
+            if (IsShortcut(entry) || _application.ProtectsFile(entry.FullName) ||
+                (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
+                    || ApplicationLocation.ContainsPath(entry.FullName, destinationPath))))
             {
                 continue;
             }
@@ -59,50 +66,9 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         _messageWriter.WriteLine(string.Empty);
     }
 
-    private static string NormalizePath(string path)
-    {
-        return Path.GetFullPath(path)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-    }
-
-    private static bool IsRunningFromDesktop(string normalizedDesktopPath, string normalizedAppPath)
-    {
-        if (string.Equals(normalizedDesktopPath, normalizedAppPath, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return normalizedAppPath.StartsWith(
-            normalizedDesktopPath + Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
-    }
-
     private static bool IsShortcut(FileSystemInfo entry)
     {
         return entry is FileInfo fileInfo && ShortcutExtensions.Contains(fileInfo.Extension);
-    }
-
-    private static bool IsCurrentProcess(string normalizedEntryPath, string? currentProcessPath)
-    {
-        if (string.IsNullOrWhiteSpace(currentProcessPath))
-        {
-            return false;
-        }
-
-        return string.Equals(
-            normalizedEntryPath,
-            NormalizePath(currentProcessPath),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsAppSettings(string normalizedEntryPath, string normalizedAppSettingsPath)
-    {
-        return string.Equals(normalizedEntryPath, normalizedAppSettingsPath, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsAppBaseDirectory(string normalizedEntryPath, string normalizedAppDirectory)
-    {
-        return string.Equals(normalizedEntryPath, normalizedAppDirectory, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string EnsureUniquePath(string destinationPath)

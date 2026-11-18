@@ -45,7 +45,7 @@ Standalone Windows Forms application for organizing a folder full of unsorted fi
 
 - Download the latest `UnsortedOrderer_v*.exe` from [GitHub Releases](https://github.com/24fisher-dev/UnsortedOrderer/releases/latest) and launch it on Windows x64. No installer or separate .NET installation is required.
 - The window shows the source and destination folders and lists the configured extensions that will be deleted.
-- The optional checkboxes import the contents of Desktop and Downloads into the source before sorting. They start unchecked. Desktop import is available when the app is run from the desktop or a folder inside it. Downloads import is unavailable if that folder does not exist or is already the source.
+- The optional checkboxes import the contents of Desktop and Downloads into the source before sorting. They start unchecked. Desktop import is available when the app is run from the desktop or a folder inside it. The running executable and its settings stay in place, and folders containing the running app are not moved. Old executables elsewhere on the desktop are sorted normally. Downloads import is unavailable if that folder does not exist or is already the source.
 - Click **Начать очистку** to start. The window stays responsive and shows the current stage and journal. When finished or stopped by an error, click **Новая очистка** to return to the options or **Выход** to quit.
 
 A successful build from `main` publishes the tested executable in GitHub Releases. The release tag and executable use the same version. Pull requests do not publish releases.

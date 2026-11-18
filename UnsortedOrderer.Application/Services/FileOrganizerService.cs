@@ -11,6 +11,7 @@ namespace UnsortedOrderer.Services;
 public sealed class FileOrganizerService
 {
     private readonly AppSettings _settings;
+    private readonly ApplicationLocation _application;
     private readonly IArchiveService _archiveService;
     private readonly IPhotoService _photoService;
     private readonly IMessengerPathService _messengerPathService;
@@ -37,9 +38,11 @@ public sealed class FileOrganizerService
         IEnumerable<ICategory> categories,
         IEnumerable<ICategoryParsingService> categoryParsingServices,
         IStatisticsService statisticsService,
-        IMessageWriter messageWriter)
+        IMessageWriter messageWriter,
+        ApplicationLocation? application = null)
     {
         _settings = settings;
+        _application = application ?? ApplicationLocation.Current;
         _archiveService = archiveService;
         _photoService = photoService;
         _messengerPathService = messengerPathService;
@@ -101,6 +104,11 @@ public sealed class FileOrganizerService
 
         foreach (var subDirectory in Directory.GetDirectories(directory))
         {
+            if (_application.ProtectsDirectory(subDirectory))
+            {
+                continue;
+            }
+
             var nonSplittableCategory = _nonSplittableCategories
                 .FirstOrDefault(category => category.IsNonSplittableDirectory(subDirectory));
 
@@ -122,6 +130,11 @@ public sealed class FileOrganizerService
 
     private void ProcessFile(string filePath)
     {
+        if (_application.ProtectsFile(filePath))
+        {
+            return;
+        }
+
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
 
         if (_deletedExtensions.Contains(extension))
@@ -279,6 +292,11 @@ public sealed class FileOrganizerService
     {
         foreach (var directory in Directory.GetDirectories(root))
         {
+            if (_application.ProtectsDirectory(directory))
+            {
+                continue;
+            }
+
             CleanEmptyDirectories(directory);
             if (IsDirectoryEmpty(directory))
             {
