@@ -11,48 +11,30 @@ public sealed class DownloadsCleanupService : IDownloadsCleanupService
         _messageWriter = messageWriter;
     }
 
-    public void CleanDownloadsIfRequested(string destinationPath)
+    private static string? GetDownloadsPath()
     {
-        if (string.IsNullOrWhiteSpace(destinationPath))
-        {
-            return;
-        }
-
         var userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (string.IsNullOrWhiteSpace(userProfilePath))
+        return string.IsNullOrWhiteSpace(userProfilePath) ? null : Path.Combine(userProfilePath, "Downloads");
+    }
+
+    public bool CanClean(string destinationPath)
+    {
+        var downloadsPath = GetDownloadsPath();
+        return !string.IsNullOrWhiteSpace(destinationPath)
+            && downloadsPath is not null
+            && Directory.Exists(downloadsPath)
+            && !string.Equals(NormalizePath(downloadsPath), NormalizePath(destinationPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Clean(string destinationPath)
+    {
+        if (!CanClean(destinationPath))
         {
             return;
         }
 
-        var downloadsPath = Path.Combine(userProfilePath, "Downloads");
-        if (!Directory.Exists(downloadsPath))
-        {
-            return;
-        }
-
-        var normalizedDownloadsPath = NormalizePath(downloadsPath);
+        var downloadsPath = GetDownloadsPath()!;
         var normalizedDestinationPath = NormalizePath(destinationPath);
-
-        if (string.Equals(normalizedDownloadsPath, normalizedDestinationPath, StringComparison.OrdinalIgnoreCase))
-        {
-            _messageWriter.WriteLine("Downloads folder is already used as the source. No cleanup required.");
-            _messageWriter.WriteLine(string.Empty);
-            return;
-        }
-
-        _messageWriter.WriteLine(
-            $"Move all files from \"{downloadsPath}\" to \"{destinationPath}\" for sorting? (y/n)");
-
-        var key = Console.ReadKey(intercept: true).KeyChar;
-        _messageWriter.WriteLine(string.Empty);
-
-        if (char.ToLowerInvariant(key) != 'y')
-        {
-            _messageWriter.WriteLine("Downloads folder cleanup skipped.");
-            _messageWriter.WriteLine(string.Empty);
-            return;
-        }
-
         Directory.CreateDirectory(destinationPath);
 
         foreach (var entry in new DirectoryInfo(downloadsPath).EnumerateFileSystemInfos())

@@ -2,5 +2,6 @@ namespace UnsortedOrderer.Contracts.Services;
 
 public interface IDownloadsCleanupService
 {
-    void CleanDownloadsIfRequested(string destinationPath);
+    bool CanClean(string destinationPath);
+    void Clean(string destinationPath);
 }

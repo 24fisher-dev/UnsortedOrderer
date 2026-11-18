@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>UnsortedOrderer</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <PropertyGroup>
+	  <MajorVersion>0</MajorVersion>
+	  <MinorVersion>4</MinorVersion>
+
+	  <!-- Build: день + месяц (01–3112) -->
+	  <BuildVersion>$([System.DateTime]::UtcNow.ToString('ddMM'))</BuildVersion>
+
+	  <!-- Revision: часы + минуты (0000–2359) -->
+	  <RevisionVersion>$([System.DateTime]::UtcNow.ToString('HHmm'))</RevisionVersion>
+
+	  <!-- Итоговая версия -->
+	  <Version>$(MajorVersion).$(MinorVersion).$(BuildVersion).$(RevisionVersion)</Version>
+
+	  <!-- Опционально: фиксированная AssemblyVersion для совместимости -->
+	  <AssemblyVersion>$(MajorVersion).$(MinorVersion).0.0</AssemblyVersion>
+	  <FileVersion>$(Version)</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\UnsortedOrderer.Application\UnsortedOrderer.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="appsettings.json" LogicalName="UnsortedOrderer.DefaultSettings" />
+  </ItemGroup>
+  <Target Name="NameStandaloneExecutable" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true'">
+    <Move SourceFiles="$(PublishDir)$(AssemblyName).exe"
+          DestinationFiles="$(PublishDir)$(AssemblyName)_v$(Version).exe" />
+    <Delete Files="$(PublishDir)UnsortedOrderer.Application.pdb" />
+  </Target>
+</Project>

@@ -18,40 +18,23 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         _messageWriter = messageWriter;
     }
 
-    public void CleanIfRunningFromDesktop(string destinationPath)
+    public bool CanClean(string destinationPath)
     {
-        if (string.IsNullOrWhiteSpace(destinationPath))
+        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        return !string.IsNullOrWhiteSpace(destinationPath)
+            && Directory.Exists(desktopPath)
+            && IsRunningFromDesktop(NormalizePath(desktopPath), NormalizePath(AppContext.BaseDirectory));
+    }
+
+    public void Clean(string destinationPath)
+    {
+        if (!CanClean(destinationPath))
         {
             return;
         }
 
         var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        if (string.IsNullOrWhiteSpace(desktopPath))
-        {
-            return;
-        }
-
-        var normalizedDesktopPath = NormalizePath(desktopPath);
         var normalizedAppPath = NormalizePath(AppContext.BaseDirectory);
-
-        if (!IsRunningFromDesktop(normalizedDesktopPath, normalizedAppPath))
-        {
-            return;
-        }
-
-        _messageWriter.WriteLine(
-            $"Application is running from the desktop. Move all files (except application shortcuts) to \"{destinationPath}\"? (y/n)");
-
-        var key = Console.ReadKey(intercept: true).KeyChar;
-        _messageWriter.WriteLine(string.Empty);
-
-        if (char.ToLowerInvariant(key) != 'y')
-        {
-            _messageWriter.WriteLine("Desktop cleanup skipped.");
-            _messageWriter.WriteLine(string.Empty);
-            return;
-        }
-
         Directory.CreateDirectory(destinationPath);
         var currentProcessPath = Environment.ProcessPath;
         var normalizedAppSettingsPath = NormalizePath(Path.Combine(normalizedAppPath, "appsettings.json"));
@@ -73,8 +56,6 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         }
 
         _messageWriter.WriteLine("Desktop cleaned.");
-        _messageWriter.WriteLine("Press any key to start the main program.");
-        Console.ReadKey(intercept: true);
         _messageWriter.WriteLine(string.Empty);
     }
 

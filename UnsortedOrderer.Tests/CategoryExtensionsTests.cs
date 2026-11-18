@@ -37,7 +37,7 @@ public class CategoryExtensionsTests
         {
             new PhotosCategory("Photos"),
             new ImagesCategory("Images"),
-            new MusicCategory("Music", new StubMusicDirectoryDetector()),
+            new MusicCategory("Music", new MusicService()),
             new MusicalInstrumentsCategory("MusicalInstruments"),
             new EBooksCategory("EBooks"),
             new DocumentsCategory(),
@@ -80,11 +80,6 @@ public class CategoryExtensionsTests
     private sealed class StubMessengerPathService : IMessengerPathService
     {
         public string? GetMessengerFolder(string filePath) => null;
-    }
-
-    private sealed class StubMusicDirectoryDetector : IMusicService
-    {
-        public bool IsMusicDirectory(string path) => false;
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyCollection<ICategory>> FindExtensionOverlaps(
