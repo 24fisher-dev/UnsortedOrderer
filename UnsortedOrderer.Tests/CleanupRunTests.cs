@@ -93,7 +93,7 @@ public sealed class CleanupRunTests : IDisposable
 
         RunSorting();
 
-        var sorted = Path.Combine(Destination, "3Дпечать", date.Year.ToString("D4"), date.Month.ToString("D2"), name);
+        var sorted = Path.Combine(Destination, "3DPrinting", date.Year.ToString("D4"), date.Month.ToString("D2"), name);
         Assert.True(File.Exists(sorted), sorted);
         Assert.Equal(contents, File.ReadAllText(sorted));
         Assert.False(File.Exists(original));
@@ -113,7 +113,7 @@ public sealed class CleanupRunTests : IDisposable
         RunSorting();
 
         Assert.Equal(contents, File.ReadAllText(Path.Combine(Destination, "Unknown", "json", "NIT PLA Pastel.json")));
-        Assert.False(Directory.Exists(Path.Combine(Destination, "3Дпечать")));
+        Assert.False(Directory.Exists(Path.Combine(Destination, "3DPrinting")));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public sealed class CleanupRunTests : IDisposable
 
         RunSorting();
 
-        var files = Directory.GetFiles(Path.Combine(Destination, "3Дпечать"), "*.stl", SearchOption.AllDirectories);
+        var files = Directory.GetFiles(Path.Combine(Destination, "3DPrinting"), "*.stl", SearchOption.AllDirectories);
         Assert.Equal(new[] { "first", "second" }, files.Select(File.ReadAllText).OrderBy(text => text));
     }
 

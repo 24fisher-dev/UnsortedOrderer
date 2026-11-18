@@ -32,6 +32,11 @@ jobs:
           if ($files.Count -ne 1 -or $files[0].Name -notmatch '^UnsortedOrderer_v\d+\.\d+\.\d+\.\d+\.exe$') {
             throw "Expected exactly one versioned standalone executable. Found $($files.Name -join ', ')"
           }
+          $filenameVersion = [regex]::Match($files[0].Name, '\d+\.\d+\.\d+\.\d+').Value
+          $embeddedVersion = $files[0].VersionInfo.FileVersion
+          if ([version]$embeddedVersion -ne [version]$filenameVersion) {
+            throw "Embedded version $embeddedVersion differs from filename version $filenameVersion"
+          }
       - name: Upload Windows x64 build from main
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
