@@ -77,6 +77,97 @@ public sealed class CleanupRunTests : IDisposable
         Assert.True(HasSortedFile("example.txt"));
     }
 
+    [Theory]
+    [InlineData("mount.STL", "stl")]
+    [InlineData("plate.3mf", "3mf")]
+    [InlineData("plate.gcode", "gcode")]
+    [InlineData("plate.bgcode", "bgcode")]
+    [InlineData("NIT PLA Pastel.json", """{"type":"filament","name":"NIT PLA Pastel","inherits":"Generic PLA"}""")]
+    [InlineData("custom.json", """{"filament_settings_id":["NIT PLA Pastel"],"filament_type":["PLA"]}""")]
+    [InlineData("inherited.json", """{"filament_settings_id":["NIT PLA Pastel"],"inherits":"Generic PLA"}""")]
+    public void Printing_files_go_to_creation_year_and_month(string name, string contents)
+    {
+        var original = WriteInput(name, contents);
+        File.SetCreationTime(original, new DateTime(2024, 2, 5, 14, 30, 0));
+        var date = File.GetCreationTime(original);
+
+        RunSorting();
+
+        var sorted = Path.Combine(Destination, "3Дпечать", date.Year.ToString("D4"), date.Month.ToString("D2"), name);
+        Assert.True(File.Exists(sorted), sorted);
+        Assert.Equal(contents, File.ReadAllText(sorted));
+        Assert.False(File.Exists(original));
+    }
+
+    [Theory]
+    [InlineData("""{"project":{"type":"filament","filament_type":["PLA"]}}""")]
+    [InlineData("""{"type":"machine","filament_type":["PLA"],"filament_settings_id":["PLA"]}""")]
+    [InlineData("""{"name":"NIT PLA Pastel","type":17}""")]
+    [InlineData("""{"type":"filament"}""")]
+    [InlineData("""{"type":"filament","name":"NIT PLA","inherits":"Generic PLA" """)]
+    [InlineData("""[{"type":"filament","inherits":"Generic PLA"}]""")]
+    public void Other_or_malformed_json_keeps_normal_sorting(string contents)
+    {
+        WriteInput("NIT PLA Pastel.json", contents);
+
+        RunSorting();
+
+        Assert.Equal(contents, File.ReadAllText(Path.Combine(Destination, "Unknown", "json", "NIT PLA Pastel.json")));
+        Assert.False(Directory.Exists(Path.Combine(Destination, "3Дпечать")));
+    }
+
+    [Fact]
+    public void Crdownload_is_deleted_but_completed_file_is_kept()
+    {
+        var partial = WriteInput("my document.pdf.CRDOWNLOAD", "incomplete");
+        WriteInput("my document.pdf", "complete");
+
+        RunSorting();
+
+        Assert.False(File.Exists(partial));
+        Assert.False(HasSortedFile("my document.pdf.CRDOWNLOAD"));
+        Assert.Equal("complete", File.ReadAllText(Path.Combine(Destination, "Documents", "my document.pdf")));
+    }
+
+    [Fact]
+    public void Same_named_print_models_are_preserved_without_overwrite()
+    {
+        WriteInput("mount.stl", "first");
+        WriteInput(Path.Combine("nested", "mount.stl"), "second");
+
+        RunSorting();
+
+        var files = Directory.GetFiles(Path.Combine(Destination, "3Дпечать"), "*.stl", SearchOption.AllDirectories);
+        Assert.Equal(new[] { "first", "second" }, files.Select(File.ReadAllText).OrderBy(text => text));
+    }
+
+    [Theory]
+    [InlineData("table.ods", "Documents")]
+    [InlineData("slides.odp", "Documents")]
+    [InlineData("art.aseprite", "Graphics")]
+    [InlineData("backup.tgz", "Archives")]
+    [InlineData("backup.zst", "Archives")]
+    public void Added_extensions_have_explicit_non_destructive_destinations(string name, string folder)
+    {
+        WriteInput(name, "test");
+        RunSorting();
+        Assert.True(File.Exists(Path.Combine(Destination, folder, name)));
+    }
+
+    private string WriteInput(string name, string contents)
+    {
+        var path = Path.Combine(Source, name);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, contents);
+        return path;
+    }
+
+    private void RunSorting()
+    {
+        using var provider = BuildRun(new CleanupStub("desktop.txt"), new CleanupStub("download.txt"), new Log());
+        provider.GetRequiredService<FileOrganizerApplication>().Run();
+    }
+
     private bool HasSortedFile(string name) =>
         Directory.EnumerateFiles(Destination, name, SearchOption.AllDirectories).Any();
 

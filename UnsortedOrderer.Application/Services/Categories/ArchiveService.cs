@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnsortedOrderer.Application.Contracts.Services.Categories;
+using UnsortedOrderer.Categories;
 using UnsortedOrderer.Contracts.Categories;
 using UnsortedOrderer.Contracts.Services;
 using UnsortedOrderer.Models;
@@ -41,10 +42,12 @@ public sealed class ArchiveService : IArchiveService
             return new ArchiveHandlingResult(movedArchive, _settings.SoftFolderName);
         }
 
-        var matchingCategory = FindMatchingSiblingCategory(filePath);
-        if (matchingCategory is not null)
+        if (FindMatchingSibling(filePath) is { } matching)
         {
-            var matchingDestinationDirectory = Path.Combine(_settings.DestinationRoot, matchingCategory.FolderName);
+            var matchingCategory = matching.Category;
+            var matchingDestinationDirectory = matchingCategory is ThreeDPrintingCategory printing
+                ? printing.GetDestinationDirectory(_settings.DestinationRoot, matching.Path)
+                : Path.Combine(_settings.DestinationRoot, matchingCategory.FolderName);
             var matchingArchiveDestination = HandleArchive(filePath, matchingDestinationDirectory);
             return new ArchiveHandlingResult(matchingArchiveDestination, matchingCategory.FolderName);
         }
@@ -87,7 +90,7 @@ public sealed class ArchiveService : IArchiveService
         }
     }
 
-    private ICategory? FindMatchingSiblingCategory(string archivePath)
+    private (ICategory Category, string Path)? FindMatchingSibling(string archivePath)
     {
         var directory = Path.GetDirectoryName(archivePath);
         var archiveName = Path.GetFileNameWithoutExtension(archivePath);
@@ -120,17 +123,18 @@ public sealed class ArchiveService : IArchiveService
 
                 if (siblingCategory is not null)
                 {
-                    return siblingCategory;
+                    return (siblingCategory, siblingPath);
                 }
 
                 continue;
             }
 
             var matchedExtension = Path.GetExtension(siblingPath).ToLowerInvariant();
-            var category = _categories.FirstOrDefault(c => c.Matches(matchedExtension));
+            var category = _categories.FirstOrDefault(c => c.Matches(matchedExtension)
+                || (matchedExtension == ".json" && c is ThreeDPrintingCategory printing && printing.IsMaterialProfile(siblingPath)));
             if (category is not null)
             {
-                return category;
+                return (category, siblingPath);
             }
         }
 

@@ -10,6 +10,8 @@ public sealed class DocumentsCategory : FileCategory
         ".txt",
         ".rtf",
         ".odt",
+        ".ods",
+        ".odp",
         ".xlsx",
         ".xls",
         ".csv",

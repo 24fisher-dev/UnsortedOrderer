@@ -6,7 +6,6 @@ public sealed class ThreeDModelsCategory : FileCategory
     [
         ".obj",
         ".fbx",
-        ".stl",
         ".3ds",
         ".dae",
         ".ply",
@@ -18,8 +17,6 @@ public sealed class ThreeDModelsCategory : FileCategory
         ".stp",
         ".iges",
         ".igs",
-        ".3mf",
-        ".gcode",
         ".scad"
     ];
 

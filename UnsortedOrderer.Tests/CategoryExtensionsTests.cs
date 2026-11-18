@@ -48,6 +48,7 @@ public class CategoryExtensionsTests
                 new StubVideoDateService(),
                 new StubMessengerPathService()),
             new ThreeDModelsCategory(),
+            new ThreeDPrintingCategory(),
             new ArchivesCategory("Archives"),
             new CertificatesCategory(),
             new FirmwareCategory("Firmware"),

@@ -21,6 +21,7 @@ public sealed class FileOrganizerService
     private readonly IReadOnlyCollection<ImageCategoryBase> _imageCategories;
     private readonly DriversCategory? _driversCategory;
     private readonly PhotosCategory? _photosCategory;
+    private readonly ThreeDPrintingCategory? _printingCategory;
     private readonly ImagesCategory? _imagesCategory;
     private readonly IReadOnlyCollection<ICategoryParsingService> _categoryParsingServices;
     private readonly CategoryCache _categoryCache;
@@ -49,6 +50,7 @@ public sealed class FileOrganizerService
         _imageCategories = _categories.OfType<ImageCategoryBase>().ToArray();
         _driversCategory = _categories.OfType<DriversCategory>().FirstOrDefault();
         _photosCategory = _imageCategories.OfType<PhotosCategory>().FirstOrDefault();
+        _printingCategory = _categories.OfType<ThreeDPrintingCategory>().FirstOrDefault();
         _imagesCategory = _imageCategories.OfType<ImagesCategory>().FirstOrDefault();
         _categoryParsingServices = categoryParsingServices.ToArray();
         _categoryCache = new CategoryCache(_categories);
@@ -158,6 +160,10 @@ public sealed class FileOrganizerService
                 var imageDestination = FileUtilities.MoveFile(filePath, imagesDirectory);
                 _statisticsService.RecordMovedFile(imageDestination, category.FolderName);
                 break;
+            case ThreeDPrintingCategory printing:
+                var printingDestination = printing.GetDestinationDirectory(_settings.DestinationRoot, filePath);
+                _statisticsService.RecordMovedFile(FileUtilities.MoveFile(filePath, printingDestination), category.FolderName);
+                break;
             case ArchivesCategory:
                 var archiveResult = _archiveService.HandleArchiveFile(filePath, category.FolderName);
                 _statisticsService.RecordMovedFile(archiveResult.DestinationPath, archiveResult.CategoryName);
@@ -177,6 +183,11 @@ public sealed class FileOrganizerService
         if (_driversCategory is not null && _driversCategory.IsDriverFile(filePath))
         {
             return _driversCategory;
+        }
+
+        if (extension == ".json" && _printingCategory?.IsMaterialProfile(filePath) == true)
+        {
+            return _printingCategory;
         }
 
         var parsedCategory = TryResolveWithParsingServices(filePath, extension);
