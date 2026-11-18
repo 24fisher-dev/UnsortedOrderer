@@ -21,6 +21,13 @@ if [[ ! $name =~ ^UnsortedOrderer_(v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.exe$ ]]; th
 fi
 tag=${BASH_REMATCH[1]}
 
+# GitHub ignores --target for an existing tag, so never reuse a tag on another commit.
+tag_ref=$(git ls-remote --refs origin "refs/tags/$tag")
+if [[ -n $tag_ref && ${tag_ref%%$'\t'*} != "$GITHUB_SHA" ]]; then
+  echo "Tag $tag belongs to a different commit." >&2
+  exit 1
+fi
+
 # Resume an unfinished draft or leave a complete published release unchanged.
 if release=$(gh release view "$tag" --json isDraft,targetCommitish,assets 2>/dev/null); then
   if [[ $(jq -r .targetCommitish <<<"$release") != "$GITHUB_SHA" ]]; then
