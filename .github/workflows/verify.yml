@@ -25,7 +25,8 @@ jobs:
         shell: pwsh
         run: |
           $output = Join-Path $env:RUNNER_TEMP "unsortedorderer-publish"
-          dotnet publish UnsortedOrderer.WinForms -c Release -r win-x64 -p:PublishProfile=FolderProfile -o $output
+          # A workflow rerun keeps its number, and builds in the same minute have different versions.
+          dotnet publish UnsortedOrderer.WinForms -c Release -r win-x64 -p:PublishProfile=FolderProfile "-p:BuildVersion=$env:GITHUB_RUN_NUMBER" -p:RevisionVersion=0 -o $output
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $files = @(Get-ChildItem -LiteralPath $output -Force)
           if ($files.Count -ne 1 -or $files[0].Name -notmatch '^UnsortedOrderer_v\d+\.\d+\.\d+\.\d+\.exe$') {
@@ -38,3 +39,24 @@ jobs:
           name: UnsortedOrderer-win-x64
           path: ${{ runner.temp }}/unsortedorderer-publish/*.exe
           if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: UnsortedOrderer-win-x64
+          path: release-package
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/publish-release.sh release-package
