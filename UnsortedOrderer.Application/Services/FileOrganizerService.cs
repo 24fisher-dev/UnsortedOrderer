@@ -176,6 +176,7 @@ public sealed class FileOrganizerService
             case ThreeDPrintingCategory printing:
                 var printingDestination = printing.GetDestinationDirectory(_settings.DestinationRoot, filePath);
                 _statisticsService.RecordMovedFile(FileUtilities.MoveFile(filePath, printingDestination), category.FolderName);
+                _archiveService.RecordPrintingFileMove(filePath, printingDestination);
                 break;
             case ArchivesCategory:
                 var archiveResult = _archiveService.HandleArchiveFile(filePath, category.FolderName);
