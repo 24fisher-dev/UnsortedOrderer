@@ -299,7 +299,7 @@ public sealed class FileOrganizerService
 
         var destinationPath = category.GetDirectoryDestination(_settings.DestinationRoot, sourceDirectory);
         var fileCount = Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories).Count();
-        Directory.Move(sourceDirectory, destinationPath);
+        DirectoryTransfer.Move(sourceDirectory, destinationPath);
 
         _statisticsService.RecordMovedNonSplittableDirectory(category, destinationPath, fileCount);
     }

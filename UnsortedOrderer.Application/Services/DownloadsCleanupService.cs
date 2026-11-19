@@ -1,4 +1,5 @@
 using UnsortedOrderer.Contracts.Services;
+using UnsortedOrderer.Models;
 
 namespace UnsortedOrderer.Services;
 
@@ -37,20 +38,32 @@ public sealed class DownloadsCleanupService : IDownloadsCleanupService
         var normalizedDestinationPath = NormalizePath(destinationPath);
         Directory.CreateDirectory(destinationPath);
 
-        foreach (var entry in new DirectoryInfo(downloadsPath).EnumerateFileSystemInfos())
+        var skipped = 0;
+        foreach (var entry in new DirectoryInfo(downloadsPath).EnumerateFileSystemInfos().ToArray())
         {
             var normalizedEntryPath = NormalizePath(entry.FullName);
 
-            if (string.Equals(normalizedEntryPath, normalizedDestinationPath, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(normalizedEntryPath, normalizedDestinationPath, StringComparison.OrdinalIgnoreCase) ||
+                ApplicationLocation.Current.ProtectsFile(entry.FullName) ||
+                entry is DirectoryInfo && (ApplicationLocation.Current.ProtectsDirectory(entry.FullName) ||
+                    ApplicationLocation.ContainsPath(entry.FullName, destinationPath)))
             {
                 continue;
             }
 
             var destination = EnsureUniquePath(Path.Combine(destinationPath, entry.Name));
-            MoveEntry(entry, destination);
+            try
+            {
+                MoveEntry(entry, destination);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                skipped++;
+                _messageWriter.WriteLine($"Не удалось полностью перенести «{entry.FullName}» → «{destination}»: {ex.Message}");
+            }
         }
 
-        _messageWriter.WriteLine("Downloads folder cleaned.");
+        _messageWriter.WriteLine(skipped == 0 ? "Загрузки обработаны." : $"Загрузки обработаны. Ошибок переноса: {skipped}.");
         _messageWriter.WriteLine(string.Empty);
     }
 
@@ -87,7 +100,7 @@ public sealed class DownloadsCleanupService : IDownloadsCleanupService
     {
         if (entry is DirectoryInfo)
         {
-            Directory.Move(entry.FullName, destinationPath);
+            DirectoryTransfer.Move(entry.FullName, destinationPath);
             return;
         }
 

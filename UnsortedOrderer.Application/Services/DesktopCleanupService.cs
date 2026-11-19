@@ -11,6 +11,7 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
     private readonly string _desktopPath;
     private readonly ApplicationLocation _application;
     private readonly DesktopShortcutOrganizer _shortcuts;
+    private readonly Action<FileSystemInfo, string> _moveEntry;
 
     public DesktopCleanupService(IMessageWriter messageWriter)
         : this(messageWriter, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
@@ -19,12 +20,13 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
     }
 
     public DesktopCleanupService(IMessageWriter messageWriter, string desktopPath, ApplicationLocation application,
-        IDesktopShortcutStore? shortcutStore = null)
+        IDesktopShortcutStore? shortcutStore = null, Action<FileSystemInfo, string>? moveEntry = null)
     {
         _messageWriter = messageWriter;
         _desktopPath = desktopPath;
         _application = application;
         _shortcuts = new DesktopShortcutOrganizer(shortcutStore ?? new DesktopShortcutStore(), messageWriter);
+        _moveEntry = moveEntry ?? MoveEntry;
     }
 
     public bool CanClean(string destinationPath)
@@ -46,7 +48,8 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         var desktopPath = _desktopPath;
         Directory.CreateDirectory(destinationPath);
 
-        foreach (var entry in new DirectoryInfo(desktopPath).EnumerateFileSystemInfos())
+        var skipped = 0;
+        foreach (var entry in new DirectoryInfo(desktopPath).EnumerateFileSystemInfos().ToArray())
         {
             if (IsShortcut(entry) || _application.ProtectsFile(entry.FullName) ||
                 (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
@@ -58,11 +61,19 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
             }
 
             var destination = EnsureUniquePath(Path.Combine(destinationPath, entry.Name));
-            MoveEntry(entry, destination);
+            try
+            {
+                _moveEntry(entry, destination);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                skipped++;
+                _messageWriter.WriteLine($"Не удалось полностью перенести «{entry.FullName}» → «{destination}»: {ex.Message}");
+            }
         }
 
         _shortcuts.Group(desktopPath, destinationPath, sortedPath);
-        _messageWriter.WriteLine("Desktop cleaned.");
+        _messageWriter.WriteLine(skipped == 0 ? "Рабочий стол обработан." : $"Рабочий стол обработан. Ошибок переноса: {skipped}.");
         _messageWriter.WriteLine(string.Empty);
     }
 
@@ -102,7 +113,7 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
     {
         if (entry is DirectoryInfo)
         {
-            Directory.Move(entry.FullName, destinationPath);
+            DirectoryTransfer.Move(entry.FullName, destinationPath);
             return;
         }
 
