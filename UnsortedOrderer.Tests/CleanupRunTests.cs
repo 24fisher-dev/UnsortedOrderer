@@ -112,12 +112,12 @@ public sealed class CleanupRunTests : IDisposable
 
         RunSorting();
 
-        Assert.Equal(contents, File.ReadAllText(Path.Combine(Destination, "Unknown", "json", "NIT PLA Pastel.json")));
+        Assert.Equal(contents, File.ReadAllText(Path.Combine(Destination, "Data", "NIT PLA Pastel.json")));
         Assert.False(Directory.Exists(Path.Combine(Destination, "3DPrinting")));
     }
 
     [Fact]
-    public void Crdownload_is_deleted_but_completed_file_is_kept()
+    public void Crdownload_moves_to_quarantine_and_completed_file_is_sorted()
     {
         var partial = WriteInput("my document.pdf.CRDOWNLOAD", "incomplete");
         WriteInput("my document.pdf", "complete");
@@ -125,8 +125,96 @@ public sealed class CleanupRunTests : IDisposable
         RunSorting();
 
         Assert.False(File.Exists(partial));
-        Assert.False(HasSortedFile("my document.pdf.CRDOWNLOAD"));
+        Assert.Equal("incomplete", File.ReadAllText(Path.Combine(Destination, "_ToDelete", "my document.pdf.CRDOWNLOAD")));
         Assert.Equal("complete", File.ReadAllText(Path.Combine(Destination, "Documents", "my document.pdf")));
+    }
+
+    [Fact]
+    public void Quarantine_keeps_duplicate_names_and_retains_contents_on_repeat()
+    {
+        WriteInput("duplicate.tmp", "root");
+        WriteInput(Path.Combine("nested", "duplicate.tmp"), "nested");
+        WriteInput("another.tmp", "temp");
+
+        RunSorting();
+        RunSorting();
+
+        var trash = Path.Combine(Destination, "_ToDelete");
+        Assert.Equal("root", File.ReadAllText(Path.Combine(trash, "duplicate.tmp")));
+        Assert.Equal("nested", File.ReadAllText(Path.Combine(trash, "duplicate(1).tmp")));
+        Assert.Equal("temp", File.ReadAllText(Path.Combine(trash, "another.tmp")));
+    }
+
+    [Fact]
+    public void Explicit_clear_removes_old_and_new_trash_but_not_other_files()
+    {
+        var oldTrash = Path.Combine(Destination, "_ToDelete", "old bundle");
+        Directory.CreateDirectory(oldTrash);
+        File.WriteAllText(Path.Combine(oldTrash, "old.exe"), "stash");
+        WriteInput("partial.crdownload", "recent");
+        WriteInput("report.txt", "keep");
+        using var provider = BuildRun(new CleanupStub("desktop.txt"), new CleanupStub("download.txt"), new Log());
+        var app = provider.GetRequiredService<FileOrganizerApplication>();
+        Assert.Equal(0, app.Run());
+        Assert.True(File.Exists(Path.Combine(oldTrash, "old.exe")));
+        Assert.True(File.Exists(Path.Combine(Destination, "_ToDelete", "partial.crdownload")));
+
+        app.ClearQuarantine();
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(Destination, "_ToDelete")));
+        Assert.True(HasSortedFile("report.txt"));
+    }
+
+    [Fact]
+    public void Failed_archive_move_is_logged_and_other_directories_are_sorted()
+    {
+        var failedArchive = WriteInput(Path.Combine("Archives", "course.zip"), "archive");
+        WriteInput(Path.Combine("other", "report.txt"), "keep");
+        Directory.CreateDirectory(Destination);
+        File.WriteAllText(Path.Combine(Destination, "Archives"), "obstructing file");
+        var trash = Path.Combine(Destination, "_ToDelete");
+        Directory.CreateDirectory(trash);
+        File.WriteAllText(Path.Combine(trash, "old.tmp"), "saved");
+        var log = new Log();
+        using var provider = BuildRun(new CleanupStub("desktop.txt"), new CleanupStub("download.txt"), log);
+
+        var failures = provider.GetRequiredService<FileOrganizerApplication>().Run();
+
+        Assert.Equal(1, failures);
+        Assert.Contains(log.Lines, line => line.Contains(failedArchive, StringComparison.Ordinal));
+        Assert.Equal("archive", File.ReadAllText(failedArchive));
+        Assert.True(HasSortedFile("report.txt"));
+        Assert.True(File.Exists(Path.Combine(trash, "old.tmp")));
+    }
+
+    [Fact]
+    public void Windows_paths_with_forward_slashes_are_normalized()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var provider = BuildRun(new CleanupStub("desktop.txt"), new CleanupStub("download.txt"), new Log(),
+            pathsWithForwardSlashes: true);
+        var settings = provider.GetRequiredService<AppSettings>();
+
+        Assert.Equal(Source, settings.SourceDirectory);
+        Assert.Equal(Destination, settings.DestinationRoot);
+    }
+
+    [Fact]
+    public void Quarantine_does_not_follow_directory_links()
+    {
+        if (OperatingSystem.IsWindows()) return; // Windows symlinks can require elevated privileges.
+        var trash = Path.Combine(Destination, "_ToDelete");
+        var elsewhere = Path.Combine(_root, "elsewhere");
+        Directory.CreateDirectory(trash);
+        Directory.CreateDirectory(elsewhere);
+        File.WriteAllText(Path.Combine(trash, "keep.tmp"), "existing");
+        Directory.CreateSymbolicLink(Path.Combine(trash, "link"), elsewhere);
+        var outsideFile = Path.Combine(elsewhere, "keep.txt");
+        File.WriteAllText(outsideFile, "outside");
+        using var provider = BuildRun(new CleanupStub("desktop.txt"), new CleanupStub("download.txt"), new Log());
+
+        Assert.Throws<IOException>(() => provider.GetRequiredService<FileOrganizerApplication>().ClearQuarantine());
+        Assert.Equal("outside", File.ReadAllText(outsideFile));
+        Assert.True(File.Exists(Path.Combine(trash, "keep.tmp")));
     }
 
     [Fact]
@@ -195,13 +283,16 @@ public sealed class CleanupRunTests : IDisposable
         Directory.EnumerateFiles(Destination, name, SearchOption.AllDirectories).Any();
 
     private ServiceProvider BuildRun(IDesktopCleanupService desktop, IDownloadsCleanupService downloads, Log log,
-        ApplicationLocation? application = null) =>
+        ApplicationLocation? application = null, bool pathsWithForwardSlashes = false) =>
         new ServiceCollection()
             .AddSingleton<IMessageWriter>(log)
             .AddSingleton(application ?? ApplicationLocation.Current)
-            .AddUnsortedOrdererApplication(new AppSettings(Source, Destination, "Soft", "Archives",
+            .AddUnsortedOrdererApplication(new AppSettings(
+                pathsWithForwardSlashes ? Source.Replace(Path.DirectorySeparatorChar, '/') : Source,
+                pathsWithForwardSlashes ? Destination.Replace(Path.DirectorySeparatorChar, '/') : Destination,
+                "Soft", "Archives",
                 "Images", "Photos", "Music", "Instruments", "EBooks", "Repositories", "Drivers", "Firmware",
-                "Metadata", "Web", "Graphics", "Unknown", [], [], [], []))
+                "Metadata", "Web", "Graphics", "Unknown", [".ini", ".tmp"], [], [], []))
             .AddSingleton(desktop)
             .AddSingleton(downloads)
             .BuildServiceProvider();

@@ -24,14 +24,15 @@ public sealed class AppSettings
         IReadOnlyCollection<DeviceBrandPattern> cameraFileNamePatterns,
         string[] softwareArchiveKeywords)
     {
-        SourceDirectory = sourceDirectory;
-        DestinationRoot = destinationRoot;
+        SourceDirectory = Path.GetFullPath(sourceDirectory);
+        DestinationRoot = Path.GetFullPath(destinationRoot);
         SoftFolderName = softFolderName;
         ArchiveFolderName = archiveFolderName;
         ImagesFolderName = imagesFolderName;
         PhotosFolderName = photosFolderName;
         MusicFolderName = musicFolderName;
-        MusicalInstrumentsFolderName = musicalInstrumentsFolderName;
+        MusicalInstrumentsFolderName = musicalInstrumentsFolderName.Equals("Instruments", StringComparison.OrdinalIgnoreCase)
+            ? "Guitar Tabs" : musicalInstrumentsFolderName;
         EBooksFolderName = eBooksFolderName;
         RepositoriesFolderName = repositoriesFolderName;
         DriversFolderName = driversFolderName;

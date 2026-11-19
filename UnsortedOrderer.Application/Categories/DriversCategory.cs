@@ -42,7 +42,7 @@ public sealed class DriversCategory : FileCategory, INonSplittableDirectoryCateg
         }
 
         var directoryName = Path.GetFileName(path);
-        if (HasDriverMarker(directoryName))
+        if (HasDriverMarker(directoryName) || IsRealtekAudioPackage(directoryName))
         {
             return true;
         }
@@ -87,6 +87,16 @@ public sealed class DriversCategory : FileCategory, INonSplittableDirectoryCateg
     public string GetFileDestination(string destinationRoot, string filePath)
     {
         return Path.Combine(destinationRoot, FolderName);
+    }
+
+    private static bool IsRealtekAudioPackage(string? name)
+    {
+        if (name is null || !name.StartsWith("Realtek", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var suffix = name["Realtek".Length..].TrimStart(' ', '_', '-');
+        return suffix.StartsWith("ALC", StringComparison.OrdinalIgnoreCase) ||
+            suffix.StartsWith("Audio", StringComparison.OrdinalIgnoreCase) ||
+            suffix.StartsWith("HD Audio", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasDriverMarker(string? name)

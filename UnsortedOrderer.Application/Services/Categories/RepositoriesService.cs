@@ -51,10 +51,13 @@ public sealed class RepositoriesService : ICategoryParsingService
             return false;
         }
 
-        if (RepositoryMarkers.Any(marker => Directory.Exists(Path.Combine(path, marker))))
+        if (HasVersionControlMarker(path))
         {
             return true;
         }
+
+        if (SoftwareDistributivesService.IsKnownProductBundle(path))
+            return false;
 
         if (ContainsManifest(path))
         {
@@ -124,6 +127,10 @@ public sealed class RepositoriesService : ICategoryParsingService
     {
         return typeof(TCategory) == typeof(RepositoriesCategory) && IsRepositoryDirectory(folderPath);
     }
+
+    internal static bool HasVersionControlMarker(string path) =>
+        RepositoryMarkers.Any(marker => Directory.Exists(Path.Combine(path, marker))) ||
+        File.Exists(Path.Combine(path, ".git"));
 
     private static string NormalizeExtension(string extension)
     {

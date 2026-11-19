@@ -4,7 +4,7 @@ public static class FileUtilities
 {
     public static string GetUniqueFilePath(string path)
     {
-        if (!File.Exists(path))
+        if (!File.Exists(path) && !Directory.Exists(path))
         {
             return path;
         }
@@ -19,7 +19,7 @@ public static class FileUtilities
         {
             candidate = Path.Combine(directory, $"{fileNameWithoutExtension}({counter}){extension}");
             counter++;
-        } while (File.Exists(candidate));
+        } while (File.Exists(candidate) || Directory.Exists(candidate));
 
         return candidate;
     }

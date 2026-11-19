@@ -11,11 +11,9 @@ public sealed class StatisticsService : IStatisticsService
     private readonly Dictionary<string, int> _movedFilesByCategory;
     private readonly HashSet<string> _deletedDirectories = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _unknownExtensions = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, int> _deletedFilesByExtension = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<NonSplittableDirectoryRecord> _movedNonSplittableDirectories = new();
     private int _totalMovedFiles;
     private int _totalUnknownFiles;
-    private int _totalDeletedFiles;
 
     public StatisticsService(IEnumerable<ICategory> categories, IMessageWriter messageWriter)
     {
@@ -61,7 +59,7 @@ public sealed class StatisticsService : IStatisticsService
     {
         if (_deletedDirectories.Add(directory))
         {
-            _messageWriter.WriteLine($"Deleted directory: {directory}");
+            _messageWriter.WriteLine($"Removed empty directory: {directory}");
         }
     }
 
@@ -77,21 +75,6 @@ public sealed class StatisticsService : IStatisticsService
         else
         {
             _unknownExtensions[key] = 1;
-        }
-    }
-
-    public void RecordDeletedFile(string extension)
-    {
-        _totalDeletedFiles++;
-        var key = string.IsNullOrWhiteSpace(extension) ? "(no extension)" : extension;
-
-        if (_deletedFilesByExtension.ContainsKey(key))
-        {
-            _deletedFilesByExtension[key]++;
-        }
-        else
-        {
-            _deletedFilesByExtension[key] = 1;
         }
     }
 
@@ -122,7 +105,6 @@ public sealed class StatisticsService : IStatisticsService
             }
         }
 
-        PrintDeletedFilesByExtension();
         PrintNonSplittableDirectories();
         PrintDeletedDirectories();
         PrintSourceDirectoryCompletion(sourceDirectory);
@@ -132,33 +114,14 @@ public sealed class StatisticsService : IStatisticsService
     {
         if (_deletedDirectories.Count == 0)
         {
-            _messageWriter.WriteLine("Deleted directories: none");
+            _messageWriter.WriteLine("Removed empty directories: none");
             return;
         }
 
-        _messageWriter.WriteLine("Deleted directories:");
+        _messageWriter.WriteLine("Removed empty directories:");
         foreach (var directory in _deletedDirectories.OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
         {
             _messageWriter.WriteLine($"  {directory}");
-        }
-    }
-
-    private void PrintDeletedFilesByExtension()
-    {
-        var filteredDeleted = _deletedFilesByExtension
-            .Where(kvp => !kvp.Key.Equals(".tmp", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        if (_totalDeletedFiles == 0 || filteredDeleted.Length == 0)
-        {
-            _messageWriter.WriteLine("Deleted uncategorized files: none");
-            return;
-        }
-
-        _messageWriter.WriteLine($"Deleted uncategorized files: {filteredDeleted.Sum(kvp => kvp.Value)}");
-        foreach (var deleted in filteredDeleted.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            _messageWriter.WriteLine($"  {deleted.Key}: {deleted.Value}");
         }
     }
 

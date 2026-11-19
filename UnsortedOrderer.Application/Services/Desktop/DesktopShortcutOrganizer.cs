@@ -8,7 +8,8 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
 {
     internal static bool IsGroupFolder(string name) =>
         name.Equals(DesktopShortcutClassifier.GamesFolder, StringComparison.OrdinalIgnoreCase) ||
-        name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase);
+        name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(DesktopShortcutClassifier.UtilitiesFolder, StringComparison.OrdinalIgnoreCase);
 
     public void Group(string desktop, string source, string? destination)
     {

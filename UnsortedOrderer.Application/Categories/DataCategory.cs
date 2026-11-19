@@ -4,7 +4,7 @@ using UnsortedOrderer.Services;
 
 namespace UnsortedOrderer.Categories;
 
-public sealed class DataCategory() : FileCategory("Data", "Data", [".xls", ".xlsx", ".xlsm", ".xlsb", ".csv", ".ods", ".tsv", ".parquet", ".feather", ".avro"]),
+public sealed class DataCategory() : FileCategory("Data", "Data", [".xls", ".xlsx", ".xlsm", ".xlsb", ".csv", ".ods", ".tsv", ".parquet", ".feather", ".avro", ".json"]),
     INonSplittableDirectoryCategory
 {
     public bool IsNonSplittableDirectory(string path)
@@ -21,7 +21,7 @@ public sealed class DataCategory() : FileCategory("Data", "Data", [".xls", ".xls
             {
                 foundXml = true;
             }
-            else if (!Matches(entry.Extension) && !IsFolderMetadata(entry.Name))
+            else if ((!Matches(entry.Extension) || entry.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase)) && !IsFolderMetadata(entry.Name))
             {
                 return false;
             }

@@ -51,7 +51,7 @@ public sealed class SoftCategory : FileCategory, INonSplittableDirectoryCategory
 
     public bool IsNonSplittableDirectory(string path)
     {
-        return _distributionDetector.IsFolderOfCategory<SoftCategory>(path);
+        return _distributionDetector.IsFolderOfCategory<SoftCategory>(path) && !FirmwareCategory.IsExplicitBundle(path);
     }
 
     public string GetDirectoryDestination(string destinationRoot, string directoryPath)

@@ -9,6 +9,5 @@ public interface IStatisticsService
     void RecordMovedNonSplittableDirectory(INonSplittableDirectoryCategory category, string destinationPath, int fileCount);
     void RecordDeletedDirectory(string directory);
     void RecordUnknownFile(string extension);
-    void RecordDeletedFile(string extension);
     void PrintStatistics(string sourceDirectory);
 }

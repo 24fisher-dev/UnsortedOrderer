@@ -28,8 +28,10 @@ public sealed class FileOrganizerService
     private readonly IReadOnlyCollection<ICategoryParsingService> _categoryParsingServices;
     private readonly CategoryCache _categoryCache;
     private readonly UnknownCategory _unknownCategory;
-    private readonly HashSet<string> _deletedExtensions;
+    private readonly HashSet<string> _quarantineExtensions;
+    private readonly DeletionQuarantine _quarantine;
     private readonly string[] _softwareArchiveKeywords;
+    private int _failedEntries;
 
     public FileOrganizerService(
         AppSettings settings,
@@ -58,7 +60,8 @@ public sealed class FileOrganizerService
         _imagesCategory = _imageCategories.OfType<ImagesCategory>().FirstOrDefault();
         _categoryParsingServices = categoryParsingServices.ToArray();
         _categoryCache = new CategoryCache(_categories);
-        _deletedExtensions = FileUtilities
+        _quarantine = new DeletionQuarantine(settings.DestinationRoot);
+        _quarantineExtensions = FileUtilities
             .NormalizeExtensions(settings.DeletedExtensions)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -72,8 +75,11 @@ public sealed class FileOrganizerService
         ValidateCategoryExtensions();
     }
 
-    public void Organize()
+    internal void ClearQuarantine() => _quarantine.Clear(_application, _settings.SourceDirectory);
+
+    public int Organize()
     {
+        _failedEntries = 0;
         if (!Directory.Exists(_settings.SourceDirectory))
         {
             Directory.CreateDirectory(_settings.SourceDirectory);
@@ -88,10 +94,11 @@ public sealed class FileOrganizerService
             : $"Ensured destination root exists at '{_settings.DestinationRoot}'.";
         _messageWriter.WriteLine(destinationMessage);
 
-        ProcessDirectory(_settings.SourceDirectory);
-        CleanEmptyDirectories(_settings.SourceDirectory);
+        new LegacyCategoryMigration(_settings, _application, _categories, _messageWriter).Run();
+        TryProcessEntry(_settings.SourceDirectory, () => ProcessDirectory(_settings.SourceDirectory));
 
-        PrintStatistics();
+        TryProcessEntry(_settings.SourceDirectory, PrintStatistics);
+        return _failedEntries;
     }
 
     private void ProcessDirectory(string directory)
@@ -100,32 +107,66 @@ public sealed class FileOrganizerService
 
         foreach (var file in Directory.GetFiles(directory))
         {
-            ProcessFile(file);
+            TryProcessEntry(file, () => ProcessFile(file));
         }
 
         foreach (var subDirectory in Directory.GetDirectories(directory))
         {
-            if (_application.ProtectsDirectory(subDirectory))
-            {
-                continue;
-            }
+            TryProcessEntry(subDirectory, () => ProcessSubdirectory(subDirectory));
+        }
+    }
 
-            var nonSplittableCategory = _nonSplittableCategories
-                .FirstOrDefault(category => category.IsNonSplittableDirectory(subDirectory));
+    private void ProcessSubdirectory(string subDirectory)
+    {
+        if (ShouldSkipDirectory(subDirectory))
+            return;
 
-            if (nonSplittableCategory is not null)
-            {
-                MoveNonSplittableDirectory(subDirectory, nonSplittableCategory);
-                continue;
-            }
+        var nonSplittableCategory = _nonSplittableCategories
+            .FirstOrDefault(category => category.IsNonSplittableDirectory(subDirectory));
 
-            ProcessDirectory(subDirectory);
+        if (nonSplittableCategory is not null)
+        {
+            var moved = MoveNonSplittableDirectory(subDirectory, nonSplittableCategory);
+            if (!ApplicationLocation.SamePath(subDirectory, moved))
+                RemoveVacatedWrappers(subDirectory, moved);
+            return;
+        }
 
-            if (IsDirectoryEmpty(subDirectory))
-            {
-                _statisticsService.RecordDeletedDirectory(subDirectory);
-                Directory.Delete(subDirectory, recursive: false);
-            }
+        ProcessDirectory(subDirectory);
+        RemoveDirectoryIfEmpty(subDirectory);
+    }
+
+    private void RemoveVacatedWrappers(string outer, string movedRepository)
+    {
+        for (var wrapper = Path.GetDirectoryName(movedRepository);
+             wrapper is not null && ApplicationLocation.ContainsPath(outer, wrapper);
+             wrapper = Path.GetDirectoryName(wrapper))
+        {
+            if (ShouldSkipDirectory(wrapper) || !RemoveDirectoryIfEmpty(wrapper))
+                break;
+        }
+    }
+
+    private bool RemoveDirectoryIfEmpty(string directory)
+    {
+        if (!IsDirectoryEmpty(directory))
+            return false;
+
+        Directory.Delete(directory);
+        _statisticsService.RecordDeletedDirectory(directory);
+        return true;
+    }
+
+    private void TryProcessEntry(string path, Action process)
+    {
+        try
+        {
+            process();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _failedEntries++;
+            _messageWriter.WriteLine($"Не удалось обработать «{path}»: {ex.Message}");
         }
     }
 
@@ -138,10 +179,10 @@ public sealed class FileOrganizerService
 
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
 
-        if (_deletedExtensions.Contains(extension))
+        if (_quarantineExtensions.Contains(extension))
         {
-            _statisticsService.RecordDeletedFile(extension);
-            File.Delete(filePath);
+            var quarantined = _quarantine.MoveFile(filePath);
+            _statisticsService.RecordMovedFile(quarantined, DeletionQuarantine.FolderName);
             return;
         }
 
@@ -291,7 +332,7 @@ public sealed class FileOrganizerService
         return result is bool matched && matched;
     }
 
-    private void MoveNonSplittableDirectory(string directory, INonSplittableDirectoryCategory category)
+    private string MoveNonSplittableDirectory(string directory, INonSplittableDirectoryCategory category)
     {
         var sourceDirectory = category is RepositoriesCategory repositoriesCategory
             ? repositoriesCategory.GetRepositoryRoot(directory) ?? directory
@@ -302,25 +343,13 @@ public sealed class FileOrganizerService
         DirectoryTransfer.Move(sourceDirectory, destinationPath);
 
         _statisticsService.RecordMovedNonSplittableDirectory(category, destinationPath, fileCount);
+        return sourceDirectory;
     }
 
-    private void CleanEmptyDirectories(string root)
-    {
-        foreach (var directory in Directory.GetDirectories(root))
-        {
-            if (_application.ProtectsDirectory(directory))
-            {
-                continue;
-            }
-
-            CleanEmptyDirectories(directory);
-            if (IsDirectoryEmpty(directory))
-            {
-                _statisticsService.RecordDeletedDirectory(directory);
-                Directory.Delete(directory, recursive: false);
-            }
-        }
-    }
+    private bool ShouldSkipDirectory(string directory) =>
+        _application.ProtectsDirectory(directory)
+        || ApplicationLocation.ContainsPath(directory, _settings.DestinationRoot)
+        || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0;
 
     private static bool IsDirectoryEmpty(string path)
     {

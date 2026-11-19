@@ -6,6 +6,8 @@ namespace UnsortedOrderer.Application.Application;
 
 public sealed class FileOrganizerApplication
 {
+    public const string QuarantineFolderName = DeletionQuarantine.FolderName;
+
     private readonly AppSettings _settings;
     private readonly FileOrganizerService _organizer;
     private readonly IMessageWriter _messageWriter;
@@ -27,11 +29,14 @@ public sealed class FileOrganizerApplication
         _downloads = downloads;
     }
 
-    public void Run(
+    public int Run(
         bool cleanDesktop = false,
         bool cleanDownloads = false,
         Action<CleanupStage>? onStage = null)
     {
+        if (ApplicationLocation.ContainsPath(_settings.DestinationRoot, _settings.SourceDirectory))
+            throw new IOException("Папка разбора не может находиться внутри папки назначения.");
+
         var desktopWasCleaned = cleanDesktop && _desktop.CanClean(_settings.SourceDirectory);
         if (desktopWasCleaned)
         {
@@ -46,19 +51,13 @@ public sealed class FileOrganizerApplication
         }
 
         onStage?.Invoke(CleanupStage.Sorting);
-        var deletionExtensions = FileUtilities
+        var quarantineExtensions = FileUtilities
             .NormalizeExtensions(_settings.DeletedExtensions)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (deletionExtensions.Length == 0)
-        {
-            _messageWriter.WriteLine("WARNING: No file extensions configured for deletion in appsettings.json.");
-        }
-        else
-        {
-            _messageWriter.WriteLine("WARNING: Files with these extensions will be deleted: " + string.Join(", ", deletionExtensions));
-        }
+        _messageWriter.WriteLine($"Extensions moved to {DeletionQuarantine.FolderName}: " +
+            string.Join(", ", quarantineExtensions));
 
         _messageWriter.WriteLine(string.Empty);
 
@@ -79,11 +78,19 @@ public sealed class FileOrganizerApplication
         _messageWriter.WriteLine(string.Empty);
         _messageWriter.WriteLine("Starting organization...");
 
-        _organizer.Organize();
+        var failedEntries = _organizer.Organize();
 
         if (desktopWasCleaned)
         {
             _desktop.CreateFolderShortcuts(_settings.SourceDirectory, _settings.DestinationRoot);
         }
+
+        return failedEntries;
+    }
+
+    public void ClearQuarantine()
+    {
+        _organizer.ClearQuarantine();
+        _messageWriter.WriteLine($"Корзина {QuarantineFolderName} очищена.");
     }
 }

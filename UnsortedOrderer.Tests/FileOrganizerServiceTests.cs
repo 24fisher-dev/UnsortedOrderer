@@ -17,7 +17,7 @@ namespace UnsortedOrderer.Tests;
 public partial class FileOrganizerServiceTests
 {
     [Fact]
-    public void RepositoryInsideWrapperDirectories_IsExtractedAndMoved()
+    public void RepositoryInsideWrapperDirectories_IsMovedAndEmptyWrappersAreRemoved()
     {
         using var source = new TempDirectory();
         using var destination = new TempDirectory();
@@ -71,14 +71,14 @@ public partial class FileOrganizerServiceTests
             new RecordingStatisticsService(),
             new StubMessageWriter());
 
-        InvokeProcessDirectory(organizer, source.Path);
+        Assert.Equal(0, organizer.Organize());
 
         var repositoriesDestination = System.IO.Path.Combine(destination.Path, settings.RepositoriesFolderName);
         var expectedRepositoryPath = System.IO.Path.Combine(repositoriesDestination, "my-repo");
 
         Assert.True(Directory.Exists(expectedRepositoryPath));
         Assert.False(Directory.Exists(System.IO.Path.Combine(repositoriesDestination, "outer")));
-        Assert.True(Directory.Exists(outer));
+        Assert.False(Directory.Exists(outer));
     }
 
     [Fact]
@@ -351,10 +351,6 @@ public partial class FileOrganizerServiceTests
         }
 
         public void RecordUnknownFile(string extension)
-        {
-        }
-
-        public void RecordDeletedFile(string extension)
         {
         }
 

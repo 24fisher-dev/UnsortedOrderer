@@ -8,7 +8,7 @@ public sealed class RepositoriesCategory : FileCategory, INonSplittableDirectory
 {
     public static readonly string[] CodeExtensions =
     {
-        ".cs",
+        ".cs", ".ino",
         ".fs",
         ".vb",
         ".csproj",

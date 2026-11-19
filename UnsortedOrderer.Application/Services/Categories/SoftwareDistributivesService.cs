@@ -32,7 +32,24 @@ public sealed class SoftwareDistributivesService : ISoftwareDistributivesService
             return true;
         }
 
-        return SetupKeywords.IsMatch(folderName);
+        return SetupKeywords.IsMatch(folderName) || IsKnownProductBundle(path);
+    }
+
+    internal static bool IsKnownProductBundle(string path)
+    {
+        var name = Path.GetFileName(path);
+        if (name.StartsWith("Adobe ", StringComparison.OrdinalIgnoreCase))
+            name = name["Adobe ".Length..];
+        if (!name.StartsWith("Photoshop", StringComparison.OrdinalIgnoreCase) &&
+            !name.StartsWith("AIDA64", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return Directory.EnumerateFiles(path, "*", new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            IgnoreInaccessible = true
+        }).Any(file => InstallerExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase));
     }
 
     private static bool MatchesInstaller(string filePath)

@@ -16,6 +16,8 @@ public sealed class ArchiveService : IArchiveService
     private readonly IReadOnlyCollection<ICategory> _categories;
     private readonly IReadOnlyCollection<INonSplittableDirectoryCategory> _nonSplittableCategories;
     private readonly IStatisticsService _statisticsService;
+    private readonly DeletionQuarantine _quarantine;
+    private readonly ApplicationLocation _application;
     private readonly string[] _softwareArchiveKeywords;
     private readonly Dictionary<string, List<CompanionFileMove>> _companionMovesBySourceDirectory =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -23,7 +25,8 @@ public sealed class ArchiveService : IArchiveService
     public ArchiveService(
         AppSettings settings,
         IEnumerable<ICategory> categories,
-        IStatisticsService statisticsService)
+        IStatisticsService statisticsService,
+        ApplicationLocation? application = null)
     {
         _settings = settings;
         _categories = categories.ToArray();
@@ -31,6 +34,8 @@ public sealed class ArchiveService : IArchiveService
             .OfType<INonSplittableDirectoryCategory>()
             .ToArray();
         _statisticsService = statisticsService;
+        _quarantine = new DeletionQuarantine(settings.DestinationRoot);
+        _application = application ?? ApplicationLocation.Current;
         _softwareArchiveKeywords = settings.SoftwareArchiveKeywords ?? Array.Empty<string>();
     }
 
@@ -118,7 +123,10 @@ public sealed class ArchiveService : IArchiveService
         var destinationPath = Path.Combine(finalDestinationDirectory, Path.GetFileName(archivePath));
         if (File.Exists(destinationPath))
         {
-            File.Delete(destinationPath);
+            if (ApplicationLocation.SamePath(archivePath, destinationPath))
+                return destinationPath;
+            var preserved = _quarantine.MoveFile(destinationPath);
+            _statisticsService.RecordMovedFile(preserved, DeletionQuarantine.FolderName);
         }
 
         File.Move(archivePath, destinationPath);
@@ -134,10 +142,13 @@ public sealed class ArchiveService : IArchiveService
             _settings.SoftFolderName,
             archiveName);
 
-        if (Directory.Exists(potentialDistributionDirectory))
+        if (Directory.Exists(potentialDistributionDirectory)
+            && !_application.ProtectsDirectory(potentialDistributionDirectory)
+            && (File.GetAttributes(potentialDistributionDirectory) & FileAttributes.ReparsePoint) == 0
+            && !ApplicationLocation.ContainsPath(potentialDistributionDirectory, archivePath))
         {
-            _statisticsService.RecordDeletedDirectory(potentialDistributionDirectory);
-            Directory.Delete(potentialDistributionDirectory, recursive: true);
+            var preserved = _quarantine.MoveDirectory(potentialDistributionDirectory);
+            _statisticsService.RecordMovedFile(preserved, DeletionQuarantine.FolderName);
         }
     }
 
@@ -227,20 +238,24 @@ public sealed class ArchiveService : IArchiveService
 
     private string? FindMatchingDirectoryInDestinationRoot(string archiveName)
     {
-        foreach (var entry in Directory.EnumerateFileSystemEntries(_settings.DestinationRoot, "*", SearchOption.AllDirectories))
+        var pending = new Stack<string>();
+        pending.Push(_settings.DestinationRoot);
+        var options = new EnumerationOptions { AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = true };
+        while (pending.TryPop(out var folder))
         {
-            var siblingName = Directory.Exists(entry)
-                ? Path.GetFileName(entry)
-                : Path.GetFileNameWithoutExtension(entry);
-
-            if (!IsHalfNameMatch(archiveName, siblingName))
+            foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", options))
             {
-                continue;
-            }
+                if (ApplicationLocation.SamePath(entry.FullName, _quarantine.DirectoryPath))
+                    continue;
 
-            return Directory.Exists(entry)
-                ? entry
-                : Path.GetDirectoryName(entry);
+                var isDirectory = entry is DirectoryInfo;
+                var siblingName = isDirectory ? entry.Name : Path.GetFileNameWithoutExtension(entry.Name);
+                if (IsHalfNameMatch(archiveName, siblingName))
+                    return isDirectory ? entry.FullName : folder;
+
+                if (isDirectory)
+                    pending.Push(entry.FullName);
+            }
         }
 
         return null;
