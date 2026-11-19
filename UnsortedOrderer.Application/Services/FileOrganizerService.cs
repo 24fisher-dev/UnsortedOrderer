@@ -230,7 +230,7 @@ public sealed class FileOrganizerService
                     : Path.Combine(_settings.DestinationRoot, category.FolderName);
                 var destination = FileUtilities.MoveFile(filePath, destinationDirectory);
                 _statisticsService.RecordMovedFile(destination, category.FolderName);
-                if (extension == ".gpx")
+                if (category is GpsTracksCategory || extension == ".gpx")
                 {
                     _archiveService.RecordCompanionFileMove(filePath, destinationDirectory, category.FolderName);
                 }
@@ -254,6 +254,9 @@ public sealed class FileOrganizerService
         {
             return FileFormatProbe.ResolveGpxCategory(filePath, _categories);
         }
+
+        if (MapTrackProbe.IsTrack(filePath) && _categories.OfType<GpsTracksCategory>().FirstOrDefault() is { } tracks)
+            return tracks;
 
         if (extension == ".scr" && FileFormatProbe.IsWindowsExecutable(filePath))
         {

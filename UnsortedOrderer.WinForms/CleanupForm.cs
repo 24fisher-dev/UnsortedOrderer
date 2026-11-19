@@ -181,7 +181,7 @@ internal sealed class CleanupForm : Form
     {
         _desktop.Enabled = _desktopService.CanClean(_settings.SourceDirectory);
         _commonDesktop.Enabled = _desktopService.CanCleanCommon(_settings.SourceDirectory);
-        _commonDesktop.Checked = false;
+        _commonDesktop.Checked = _commonDesktop.Enabled;
         _downloads.Enabled = new Services.DownloadsCleanupService(_log).CanClean(_settings.SourceDirectory);
         _desktop.Checked = _desktop.Enabled;
         _downloads.Checked = _downloads.Enabled;

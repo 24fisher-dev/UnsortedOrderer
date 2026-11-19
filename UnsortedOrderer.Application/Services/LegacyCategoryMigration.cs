@@ -24,6 +24,14 @@ internal sealed class LegacyCategoryMigration(
         if (settings.MusicalInstrumentsFolderName == "Guitar Tabs")
             Consolidate("Instruments", "Guitar Tabs");
 
+        if (categories.OfType<GpsTracksCategory>().FirstOrDefault() is { } tracks)
+        {
+            Consolidate("GPX", tracks.FolderName);
+            var maps = categories.OfType<MapsCategory>().FirstOrDefault();
+            if (maps is not null)
+                RepairMapTracks(maps, tracks.FolderName);
+        }
+
         var drivers = categories.OfType<DriversCategory>().FirstOrDefault();
         var soft = categories.OfType<SoftCategory>().FirstOrDefault();
         if (drivers is not null && soft is not null)
@@ -68,6 +76,62 @@ internal sealed class LegacyCategoryMigration(
             if (!Directory.EnumerateFileSystemEntries(source).Any())
                 Directory.Delete(source);
         });
+    }
+
+    private void RepairMapTracks(MapsCategory maps, string tracksFolderName)
+    {
+        var source = Path.Combine(settings.DestinationRoot, maps.FolderName);
+        var target = Path.Combine(settings.DestinationRoot, tracksFolderName);
+        if (!IsPlainDirectory(source))
+            return;
+
+        TryMove(source, () =>
+        {
+            var entries = new DirectoryInfo(source).GetFiles();
+            var movedStems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var mapStems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in entries.Where(file => maps.Matches(file.Extension)))
+            {
+                var stem = Path.GetFileNameWithoutExtension(file.Name);
+                // Until proven and moved, this file is still a candidate companion for an archive.
+                var moved = false;
+                TryMove(file.FullName, () =>
+                {
+                    if (CanMoveFile(file) && MapTrackProbe.IsTrack(file.FullName))
+                    {
+                        MoveToTracks(file);
+                        moved = true;
+                    }
+                });
+                (moved ? movedStems : mapStems).Add(stem);
+            }
+
+            if (categories.OfType<ArchivesCategory>().FirstOrDefault() is { } archives)
+            {
+                foreach (var file in entries.Where(file => archives.Matches(file.Extension)))
+                {
+                    var stem = Path.GetFileNameWithoutExtension(file.Name);
+                    if (!movedStems.Contains(stem) || mapStems.Contains(stem))
+                        continue;
+
+                    TryMove(file.FullName, () =>
+                    {
+                        if (CanMoveFile(file))
+                            MoveToTracks(file);
+                    });
+                }
+            }
+        });
+
+        bool CanMoveFile(FileInfo file) => !application.ProtectsFile(file.FullName) &&
+            (file.Attributes & FileAttributes.ReparsePoint) == 0;
+
+        void MoveToTracks(FileInfo file)
+        {
+            EnsurePlainTarget(target);
+            var destination = FileUtilities.MoveFile(file.FullName, target);
+            log.WriteLine($"Перенесено из Maps в GPS Tracks: «{file.FullName}» → «{destination}».");
+        }
     }
 
     private void RepairPackages(string oldName, Func<string, INonSplittableDirectoryCategory?> classify)

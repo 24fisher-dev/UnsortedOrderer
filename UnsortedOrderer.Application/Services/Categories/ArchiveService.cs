@@ -193,6 +193,8 @@ public sealed class ArchiveService : IArchiveService
 
             var matchedExtension = Path.GetExtension(siblingPath).ToLowerInvariant();
             var category = matchedExtension == ".gpx" ? FileFormatProbe.ResolveGpxCategory(siblingPath, _categories)
+                : MapTrackProbe.IsTrack(siblingPath) && _categories.OfType<GpsTracksCategory>().FirstOrDefault() is { } gps
+                    ? gps
                 : _categories.FirstOrDefault(c => c.Matches(matchedExtension)
                 || (matchedExtension == ".json" && c is ThreeDPrintingCategory printing && printing.IsMaterialProfile(siblingPath)));
             if (category is not null)
