@@ -33,20 +33,19 @@ public sealed class FileOrganizerApplication
         bool cleanDesktop = false,
         bool cleanDownloads = false,
         Action<CleanupStage>? onStage = null,
-        bool groupCommonDesktop = false)
+        bool cleanCommonDesktop = false)
     {
         if (ApplicationLocation.ContainsPath(_settings.DestinationRoot, _settings.SourceDirectory))
             throw new IOException("Папка разбора не может находиться внутри папки назначения.");
 
         var desktopErrors = 0;
         var desktopAvailable = cleanDesktop && _desktop.CanClean(_settings.SourceDirectory);
-        if (desktopAvailable || groupCommonDesktop)
+        if (desktopAvailable || cleanCommonDesktop)
             onStage?.Invoke(CleanupStage.Desktop);
-        if (groupCommonDesktop)
-            desktopErrors += _desktop.CleanCommon(_settings.SourceDirectory, _settings.DestinationRoot);
-        if (desktopAvailable)
-            desktopErrors += _desktop.Clean(_settings.SourceDirectory, _settings.DestinationRoot);
-        else if (cleanDesktop)
+        if (desktopAvailable || cleanCommonDesktop)
+            desktopErrors += _desktop.CleanSelected(_settings.SourceDirectory, _settings.DestinationRoot,
+                personal: desktopAvailable, common: cleanCommonDesktop);
+        if (cleanDesktop && !desktopAvailable)
         {
             _messageWriter.WriteLine("Личный рабочий стол недоступен или совпадает с папкой разбора. Перенос пропущен.");
             desktopErrors++;

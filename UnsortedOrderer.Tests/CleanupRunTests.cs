@@ -49,8 +49,40 @@ public sealed class CleanupRunTests : IDisposable
 
         Assert.Equal(0, app.Run(cleanDesktop: true));
         Assert.Equal(0, desktop.CommonCalls);
-        Assert.Equal(1, app.Run(groupCommonDesktop: true));
+        Assert.Equal(1, app.Run(cleanCommonDesktop: true));
         Assert.Equal(1, desktop.CommonCalls);
+    }
+
+    [Fact]
+    public void Files_reported_on_the_common_desktop_reach_sorted_categories_when_enabled()
+    {
+        var personal = Directory.CreateDirectory(Path.Combine(_root, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(_root, "Public")).FullName;
+        var log = new Log();
+        File.WriteAllText(Path.Combine(shared, "ipad.json"), "{}");
+        File.WriteAllText(Path.Combine(shared, "cascade.conf"), "configuration");
+        File.WriteAllText(Path.Combine(shared, "haven.zip"), "archive");
+        File.WriteAllText(Path.Combine(shared, "automation.bat"), "@echo off");
+        var executable = Path.Combine(shared, "UnsortedOrderer.exe");
+        File.WriteAllText(executable, "running executable");
+        var location = new ApplicationLocation(shared, executable);
+        var desktop = new UnsortedOrderer.Services.DesktopCleanupService(log, personal, location, commonDesktopPath: shared);
+
+        using (var provider = BuildRun(desktop, new CleanupStub("download.txt"), log, location))
+            Assert.Equal(0, provider.GetRequiredService<FileOrganizerApplication>().Run(cleanDesktop: true));
+        Assert.True(File.Exists(Path.Combine(shared, "ipad.json")));
+
+        using (var provider = BuildRun(desktop, new CleanupStub("download.txt"), log, location))
+            Assert.Equal(0, provider.GetRequiredService<FileOrganizerApplication>().Run(cleanDesktop: true, cleanCommonDesktop: true));
+
+        Assert.Equal("{}", File.ReadAllText(Path.Combine(Destination, "Data", "ipad.json")));
+        Assert.Equal("configuration", File.ReadAllText(Path.Combine(Destination, "Configurations", "cascade.conf")));
+        Assert.Equal("archive", File.ReadAllText(Path.Combine(Destination, "Archives", "haven.zip")));
+        Assert.Equal("@echo off", File.ReadAllText(Path.Combine(shared, "automation.bat")));
+        Assert.True(File.Exists(executable));
+        Assert.False(File.Exists(Path.Combine(shared, "ipad.json")));
+        Assert.False(File.Exists(Path.Combine(shared, "cascade.conf")));
+        Assert.False(File.Exists(Path.Combine(shared, "haven.zip")));
     }
 
     [Fact]
@@ -341,6 +373,9 @@ public sealed class CleanupRunTests : IDisposable
             Clean(destinationPath);
             return 0;
         }
+
+        public int CleanSelected(string destinationPath, string? sortedPath, bool personal, bool common) =>
+            (personal ? Clean(destinationPath, sortedPath) : 0) + (common ? CleanCommon(destinationPath, sortedPath) : 0);
 
         public int CommonCalls { get; private set; }
         public int CleanCommon(string destinationPath, string? sortedPath)
