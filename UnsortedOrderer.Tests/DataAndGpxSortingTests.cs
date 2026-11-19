@@ -1,4 +1,6 @@
 using System.Text;
+using System.Reflection;
+using UnsortedOrderer.Services;
 using Microsoft.Extensions.DependencyInjection;
 using UnsortedOrderer.Application.Application;
 using UnsortedOrderer.Application.DependencyInjection;
@@ -108,6 +110,31 @@ public sealed class DataAndGpxSortingTests : IDisposable
         Assert.Single(Directory.EnumerateFiles(Path.Combine(Destination, "Soft"), "saver.scr", SearchOption.AllDirectories));
     }
 
+    [Theory]
+    [InlineData("BCFSscore", "Instruments", "GPX", true)]
+    [InlineData("BCFSscore", "Instruments", "GPX", false)]
+    [InlineData("<gpx><trk/></gpx>", "GPX", "Instruments", true)]
+    [InlineData("<gpx><trk/></gpx>", "GPX", "Instruments", false)]
+    public void Archive_follows_current_gpx_not_older_same_name_in_both_orders(string content, string folder, string oldFolder, bool archiveFirst)
+    {
+        var archive = Put("route.zip", "new archive");
+        var gpx = Put("route.gpx", content);
+        var old = Path.Combine(Destination, oldFolder);
+        Directory.CreateDirectory(old);
+        File.WriteAllText(Path.Combine(old, "route.zip"), "old archive");
+        using var provider = BuildProvider();
+
+        var sorter = provider.GetRequiredService<FileOrganizerService>();
+        var processFile = typeof(FileOrganizerService).GetMethod("ProcessFile", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        processFile.Invoke(sorter, [archiveFirst ? archive : gpx]);
+        processFile.Invoke(sorter, [archiveFirst ? gpx : archive]);
+        provider.GetRequiredService<FileOrganizerApplication>().Run();
+
+        Assert.Equal(content, File.ReadAllText(Path.Combine(Destination, folder, "route.gpx")));
+        Assert.Equal("new archive", File.ReadAllText(Path.Combine(Destination, folder, "route.zip")));
+        Assert.Equal("old archive", File.ReadAllText(Path.Combine(old, "route.zip")));
+    }
+
     private string Put(string relativePath, string contents)
     {
         var path = Path.Combine(Source, relativePath);
@@ -118,14 +145,16 @@ public sealed class DataAndGpxSortingTests : IDisposable
 
     private void Sort()
     {
-        using var provider = new ServiceCollection()
+        using var provider = BuildProvider();
+        provider.GetRequiredService<FileOrganizerApplication>().Run();
+    }
+
+    private ServiceProvider BuildProvider() => new ServiceCollection()
             .AddSingleton<IMessageWriter>(new NullLog())
             .AddUnsortedOrdererApplication(new AppSettings(Source, Destination, "Soft", "Archives",
                 "Images", "Photos", "Music", "Instruments", "EBooks", "Repositories", "Drivers", "Firmware",
                 "Metadata", "Web", "Graphics", "Unknown", [], [], [], []))
             .BuildServiceProvider();
-        provider.GetRequiredService<FileOrganizerApplication>().Run();
-    }
 
     public void Dispose()
     {

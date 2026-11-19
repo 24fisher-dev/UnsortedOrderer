@@ -17,8 +17,7 @@ public sealed class ArchiveService : IArchiveService
     private readonly IReadOnlyCollection<INonSplittableDirectoryCategory> _nonSplittableCategories;
     private readonly IStatisticsService _statisticsService;
     private readonly string[] _softwareArchiveKeywords;
-    private readonly ThreeDPrintingCategory? _printingCategory;
-    private readonly Dictionary<string, List<PrintingFileMove>> _printingMovesBySourceDirectory =
+    private readonly Dictionary<string, List<CompanionFileMove>> _companionMovesBySourceDirectory =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     public ArchiveService(
@@ -28,7 +27,6 @@ public sealed class ArchiveService : IArchiveService
     {
         _settings = settings;
         _categories = categories.ToArray();
-        _printingCategory = _categories.OfType<ThreeDPrintingCategory>().FirstOrDefault();
         _nonSplittableCategories = _categories
             .OfType<INonSplittableDirectoryCategory>()
             .ToArray();
@@ -47,17 +45,12 @@ public sealed class ArchiveService : IArchiveService
         }
 
         var sibling = FindMatchingSibling(filePath);
-        if (_printingCategory is not null)
+        var companion = GetLiveCompanionDestination(sibling) ?? FindMovedCompanion(filePath)?.Destination;
+        if (companion is { } target)
         {
-            var printingDestination = sibling?.Category is ThreeDPrintingCategory
-                ? _printingCategory.GetDestinationDirectory(_settings.DestinationRoot, sibling.Value.Path)
-                : FindMovedPrintingSiblingDirectory(filePath);
-            if (printingDestination is not null)
-            {
-                // A sibling from this run takes precedence over old same-named files in the destination.
-                var archive = FileUtilities.MoveFile(filePath, printingDestination);
-                return new ArchiveHandlingResult(archive, _printingCategory.FolderName);
-            }
+            // An identified companion from this run takes precedence over older same-named files.
+            var archive = FileUtilities.MoveFile(filePath, target.Directory);
+            return new ArchiveHandlingResult(archive, target.CategoryName);
         }
 
         RemoveExistingDistributionDirectory(filePath);
@@ -73,32 +66,47 @@ public sealed class ArchiveService : IArchiveService
         return new ArchiveHandlingResult(archiveDestination, categoryName);
     }
 
-    public void RecordPrintingFileMove(string sourcePath, string destinationDirectory)
+    private (string Directory, string CategoryName)? GetLiveCompanionDestination((ICategory Category, string Path)? sibling)
     {
-        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
-        if (!_printingMovesBySourceDirectory.TryGetValue(sourceDirectory, out var moves))
-        {
-            moves = [];
-            _printingMovesBySourceDirectory.Add(sourceDirectory, moves);
-        }
+        if (sibling is not { } file)
+            return null;
 
-        moves.Add(new PrintingFileMove(Path.GetFileNameWithoutExtension(sourcePath), destinationDirectory));
+        if (file.Category is ThreeDPrintingCategory printing)
+            return (printing.GetDestinationDirectory(_settings.DestinationRoot, file.Path), printing.FolderName);
+
+        if (file.Category is GpsTracksCategory ||
+            file.Category is MusicalInstrumentsCategory && Path.GetExtension(file.Path).Equals(".gpx", StringComparison.OrdinalIgnoreCase))
+            return (Path.Combine(_settings.DestinationRoot, file.Category.FolderName), file.Category.FolderName);
+
+        return null;
     }
 
-    private string? FindMovedPrintingSiblingDirectory(string archivePath)
+    public void RecordCompanionFileMove(string sourcePath, string destinationDirectory, string categoryName)
+    {
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
+        if (!_companionMovesBySourceDirectory.TryGetValue(sourceDirectory, out var moves))
+        {
+            moves = [];
+            _companionMovesBySourceDirectory.Add(sourceDirectory, moves);
+        }
+
+        moves.Add(new CompanionFileMove(Path.GetFileNameWithoutExtension(sourcePath), (destinationDirectory, categoryName)));
+    }
+
+    private CompanionFileMove? FindMovedCompanion(string archivePath)
     {
         var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(archivePath))!;
-        if (!_printingMovesBySourceDirectory.TryGetValue(sourceDirectory, out var moves))
+        if (!_companionMovesBySourceDirectory.TryGetValue(sourceDirectory, out var moves))
         {
             return null;
         }
 
         var archiveStem = Path.GetFileNameWithoutExtension(archivePath);
         return (moves.Find(move => string.Equals(archiveStem, move.Stem, StringComparison.OrdinalIgnoreCase))
-            ?? moves.Find(move => IsHalfNameMatch(archiveStem, move.Stem)))?.DestinationDirectory;
+            ?? moves.Find(move => IsHalfNameMatch(archiveStem, move.Stem)));
     }
 
-    private sealed record PrintingFileMove(string Stem, string DestinationDirectory);
+    private sealed record CompanionFileMove(string Stem, (string Directory, string CategoryName) Destination);
 
     public string HandleArchive(string archivePath, string destinationDirectory)
     {
@@ -173,7 +181,8 @@ public sealed class ArchiveService : IArchiveService
             }
 
             var matchedExtension = Path.GetExtension(siblingPath).ToLowerInvariant();
-            var category = _categories.FirstOrDefault(c => c.Matches(matchedExtension)
+            var category = matchedExtension == ".gpx" ? FileFormatProbe.ResolveGpxCategory(siblingPath, _categories)
+                : _categories.FirstOrDefault(c => c.Matches(matchedExtension)
                 || (matchedExtension == ".json" && c is ThreeDPrintingCategory printing && printing.IsMaterialProfile(siblingPath)));
             if (category is not null)
             {

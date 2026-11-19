@@ -177,7 +177,7 @@ public sealed class FileOrganizerService
             case ThreeDPrintingCategory printing:
                 var printingDestination = printing.GetDestinationDirectory(_settings.DestinationRoot, filePath);
                 _statisticsService.RecordMovedFile(FileUtilities.MoveFile(filePath, printingDestination), category.FolderName);
-                _archiveService.RecordPrintingFileMove(filePath, printingDestination);
+                _archiveService.RecordCompanionFileMove(filePath, printingDestination, printing.FolderName);
                 break;
             case ArchivesCategory:
                 var archiveResult = _archiveService.HandleArchiveFile(filePath, category.FolderName);
@@ -189,6 +189,10 @@ public sealed class FileOrganizerService
                     : Path.Combine(_settings.DestinationRoot, category.FolderName);
                 var destination = FileUtilities.MoveFile(filePath, destinationDirectory);
                 _statisticsService.RecordMovedFile(destination, category.FolderName);
+                if (extension == ".gpx")
+                {
+                    _archiveService.RecordCompanionFileMove(filePath, destinationDirectory, category.FolderName);
+                }
                 break;
         }
     }
@@ -207,12 +211,7 @@ public sealed class FileOrganizerService
 
         if (extension == ".gpx")
         {
-            return FileFormatProbe.ReadGpx(filePath) switch
-            {
-                GpxFormat.GuitarPro => _categories.OfType<MusicalInstrumentsCategory>().FirstOrDefault(),
-                GpxFormat.Navigation => _categories.OfType<GpsTracksCategory>().FirstOrDefault(),
-                _ => null
-            };
+            return FileFormatProbe.ResolveGpxCategory(filePath, _categories);
         }
 
         if (extension == ".scr" && FileFormatProbe.IsWindowsExecutable(filePath))

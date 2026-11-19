@@ -305,7 +305,7 @@ public partial class FileOrganizerServiceTests
 
     private sealed class StubArchiveService : IArchiveService
     {
-        public void RecordPrintingFileMove(string sourcePath, string destinationDirectory) { }
+        public void RecordCompanionFileMove(string sourcePath, string destinationDirectory, string categoryName) { }
 
         public ArchiveHandlingResult HandleArchiveFile(string archivePath, string categoryName)
         {

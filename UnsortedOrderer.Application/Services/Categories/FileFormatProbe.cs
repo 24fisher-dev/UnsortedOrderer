@@ -1,5 +1,7 @@
 using System.Reflection.PortableExecutable;
 using System.Xml;
+using UnsortedOrderer.Categories;
+using UnsortedOrderer.Contracts.Categories;
 
 namespace UnsortedOrderer.Application.Services.Categories;
 
@@ -7,7 +9,15 @@ internal enum GpxFormat { Unknown, GuitarPro, Navigation }
 
 internal static class FileFormatProbe
 {
-    public static GpxFormat ReadGpx(string path)
+    public static ICategory? ResolveGpxCategory(string path, IEnumerable<ICategory> categories) =>
+        ReadGpx(path) switch
+        {
+            GpxFormat.GuitarPro => categories.OfType<MusicalInstrumentsCategory>().FirstOrDefault(),
+            GpxFormat.Navigation => categories.OfType<GpsTracksCategory>().FirstOrDefault(),
+            _ => null
+        };
+
+    private static GpxFormat ReadGpx(string path)
     {
         try
         {
