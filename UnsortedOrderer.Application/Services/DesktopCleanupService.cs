@@ -48,80 +48,104 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         && !ApplicationLocation.ContainsPath(unsortedPath, desktopPath);
 
     public int Clean(string destinationPath, string? sortedPath = null) =>
-        CleanRoot(_desktopPath, destinationPath, sortedPath, shared: false);
+        CleanSelected(destinationPath, sortedPath, personal: true, common: false);
 
     public int CleanCommon(string destinationPath, string? sortedPath = null) =>
-        CleanRoot(_commonDesktopPath, destinationPath, sortedPath, shared: true);
+        CleanSelected(destinationPath, sortedPath, personal: false, common: true);
 
-    private int CleanRoot(string desktopPath, string unsortedPath, string? sortedPath, bool shared)
+    public int CleanSelected(string unsortedPath, string? sortedPath, bool personal, bool common)
     {
-        var label = shared ? "Общий рабочий стол" : "Личный рабочий стол";
-        if (!(shared ? CanCleanCommon(unsortedPath) : CanClean(unsortedPath)) ||
-            (sortedPath is not null && ApplicationLocation.ContainsPath(sortedPath, desktopPath)))
-        {
-            _messageWriter.WriteLine($"{label} не обработан: путь недоступен или пересекается с папками сортировки («{desktopPath}»).");
-            return 1;
-        }
+        var roots = new List<DesktopRoot>();
+        var errors = 0;
+        if (personal)
+            Prepare(_desktopPath, "Личный рабочий стол", CanClean(unsortedPath));
+        if (common)
+            Prepare(_commonDesktopPath, "Общий рабочий стол", CanCleanCommon(unsortedPath));
 
-        _messageWriter.WriteLine($"{label}: «{desktopPath}».");
-        FileSystemInfo[] entries;
-        try
-        {
-            entries = new DirectoryInfo(desktopPath).GetFileSystemInfos();
-            if (!shared)
-                Directory.CreateDirectory(unsortedPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _messageWriter.WriteLine($"Не удалось прочитать или подготовить папки «{desktopPath}» → «{unsortedPath}»: {ex.Message}");
-            return 1;
-        }
+        // Resolve shortcuts on both roots before moving any ordinary desktop entry.
+        // A shared shortcut can point to an entry on the personal desktop or vice versa.
+        var shortcutResults = roots.Select(root => _shortcuts.Group(root.Path, unsortedPath, sortedPath,
+            root.Entries.Where(IsShortcut).Select(entry => entry.FullName))).ToArray();
 
-        var moved = 0;
-        // A shortcut may point to a desktop file or directory this run is about to move.
-        // Judge its existing target before the import changes the original path.
-        var shortcuts = _shortcuts.Group(desktopPath, unsortedPath, sortedPath, entries.Where(IsShortcut).Select(entry => entry.FullName));
-        var failed = shortcuts.Errors;
-        if (!shared)
+        for (var i = 0; i < roots.Count; i++)
         {
-            foreach (var entry in entries)
+            var root = roots[i];
+            var shortcuts = shortcutResults[i];
+            var (moved, failed) = MoveEntries(root.Entries, unsortedPath, sortedPath);
+            failed += shortcuts.Errors;
+            errors += failed;
+
+            if (moved == 0 && shortcuts.Moved == 0 && shortcuts.Quarantined == 0)
+                _messageWriter.WriteLine($"{root.Label}: ничего не перемещено.");
+            _messageWriter.WriteLine($"{root.Label}: объектов в папку разбора — {moved}. Ярлыков сгруппировано — {shortcuts.Moved}. " +
+                $"Битых ярлыков в корзине — {shortcuts.Quarantined}. Ярлыков оставлено — {shortcuts.Left}. Ошибок переноса: {failed}.");
+            _messageWriter.WriteLine(string.Empty);
+        }
+        return errors;
+
+        void Prepare(string path, string label, bool available)
+        {
+            if (!available || (sortedPath is not null && ApplicationLocation.ContainsPath(sortedPath, path)))
             {
-                if (IsShortcut(entry) || entry.Name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)
-                    || entry is FileInfo && entry.Extension.Equals(".bat", StringComparison.OrdinalIgnoreCase)
-                    || _application.ProtectsFile(entry.FullName) ||
-                    (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
-                        || DesktopShortcutOrganizer.IsGroupFolder(entry.Name)
-                        || ApplicationLocation.ContainsPath(entry.FullName, unsortedPath)
-                        || sortedPath is not null && ApplicationLocation.ContainsPath(entry.FullName, sortedPath))))
+                _messageWriter.WriteLine($"{label} не обработан: путь недоступен или пересекается с папками сортировки («{path}»).");
+                errors++;
+                return;
+            }
+
+            _messageWriter.WriteLine($"{label}: «{path}».");
+            try
+            {
+                var entries = new DirectoryInfo(path).GetFileSystemInfos();
+                Directory.CreateDirectory(unsortedPath);
+                roots.Add(new DesktopRoot(path, label, entries));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _messageWriter.WriteLine($"Не удалось прочитать или подготовить папки «{path}» → «{unsortedPath}»: {ex.Message}");
+                errors++;
+            }
+        }
+    }
+
+    private (int Moved, int Failed) MoveEntries(FileSystemInfo[] entries, string unsortedPath, string? sortedPath)
+    {
+        var moved = 0;
+        var failed = 0;
+        foreach (var entry in entries)
+        {
+            if (IsShortcut(entry) || entry.Name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)
+                || entry is FileInfo && entry.Extension.Equals(".bat", StringComparison.OrdinalIgnoreCase)
+                || _application.ProtectsFile(entry.FullName) ||
+                (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
+                    || DesktopShortcutOrganizer.IsGroupFolder(entry.Name)
+                    || ApplicationLocation.ContainsPath(entry.FullName, unsortedPath)
+                    || sortedPath is not null && ApplicationLocation.ContainsPath(entry.FullName, sortedPath))))
+                continue;
+
+            var destination = EnsureUniquePath(Path.Combine(unsortedPath, entry.Name));
+            try
+            {
+                if (entry.LinkTarget is not null)
+                {
+                    _messageWriter.WriteLine($"Ссылка файловой системы оставлена на месте: «{entry.FullName}».");
                     continue;
-
-                var destination = EnsureUniquePath(Path.Combine(unsortedPath, entry.Name));
-                try
-                {
-                    if (entry.LinkTarget is not null)
-                    {
-                        _messageWriter.WriteLine($"Ссылка файловой системы оставлена на месте: «{entry.FullName}».");
-                        continue;
-                    }
-
-                    _moveEntry(entry, destination);
-                    moved++;
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    failed++;
-                    _messageWriter.WriteLine($"Не удалось полностью перенести «{entry.FullName}» → «{destination}»: {ex.Message}");
-                }
+
+                _moveEntry(entry, destination);
+                moved++;
+                _messageWriter.WriteLine($"Перенесено в папку разбора: «{entry.FullName}» → «{destination}».");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failed++;
+                _messageWriter.WriteLine($"Не удалось полностью перенести «{entry.FullName}» → «{destination}»: {ex.Message}");
             }
         }
 
-        if (moved == 0 && shortcuts.Moved == 0 && shortcuts.Quarantined == 0)
-            _messageWriter.WriteLine($"{label}: ничего не перемещено.");
-        _messageWriter.WriteLine($"{label}: объектов в папку разбора — {moved}. Ярлыков сгруппировано — {shortcuts.Moved}. " +
-            $"Битых ярлыков в корзине — {shortcuts.Quarantined}. Ярлыков оставлено — {shortcuts.Left}. Ошибок переноса: {failed}.");
-        _messageWriter.WriteLine(string.Empty);
-        return failed;
+        return (moved, failed);
     }
+
+    private sealed record DesktopRoot(string Path, string Label, FileSystemInfo[] Entries);
 
     public void CreateFolderShortcuts(string unsortedPath, string sortedPath)
     {

@@ -15,7 +15,7 @@ internal sealed class CleanupForm : Form
     private readonly WindowLog _log = new();
     private readonly Services.DesktopCleanupService _desktopService;
     private readonly CheckBox _desktop = new() { Text = "Перенести содержимое рабочего стола на сортировку", AutoSize = true };
-    private readonly CheckBox _commonDesktop = new() { Text = "Обработать ярлыки общего рабочего стола (для всех пользователей)", AutoSize = true };
+    private readonly CheckBox _commonDesktop = new() { Text = "Перенести файлы и обработать ярлыки общего рабочего стола (для всех)", AutoSize = true };
     private readonly CheckBox _downloads = new() { Text = "Перенести содержимое папки «Загрузки» на сортировку", AutoSize = true };
     private readonly Label _trashStatus = new() { AutoSize = true, Visible = false };
     private readonly FlowLayoutPanel _trashActions = new() { Dock = DockStyle.Fill, AutoSize = true, Visible = false };
@@ -121,7 +121,7 @@ internal sealed class CleanupForm : Form
 
         var cleanDesktop = _desktop.Enabled && _desktop.Checked;
         var cleanDownloads = _downloads.Enabled && _downloads.Checked;
-        var groupCommonDesktop = _commonDesktop.Enabled && _commonDesktop.Checked;
+        var cleanCommonDesktop = _commonDesktop.Enabled && _commonDesktop.Checked;
         _running = true;
         _desktop.Enabled = _commonDesktop.Enabled = _downloads.Enabled = _start.Enabled = _exit.Enabled = false;
         _progress.Style = ProgressBarStyle.Marquee;
@@ -149,7 +149,7 @@ internal sealed class CleanupForm : Form
                 // Services and statistics are scoped to one run.
                 using var provider = BuildServices();
                 return provider.GetRequiredService<FileOrganizerApplication>()
-                    .Run(cleanDesktop, cleanDownloads, ((IProgress<CleanupStage>)stage).Report, groupCommonDesktop);
+                    .Run(cleanDesktop, cleanDownloads, ((IProgress<CleanupStage>)stage).Report, cleanCommonDesktop);
             });
         }
         catch (Exception exception)

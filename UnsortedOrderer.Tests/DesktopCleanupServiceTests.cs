@@ -144,7 +144,8 @@ public class DesktopCleanupServiceTests
             Assert.Equal(0, cleaner.CleanCommon(unsorted));
             Assert.True(File.Exists(Path.Combine(shared, "Utilities", "CPUID HWMonitor.lnk")));
             Assert.True(File.Exists(Path.Combine(shared, "Games", "Need for Speed.lnk")));
-            Assert.True(File.Exists(publicDocument));
+            Assert.False(File.Exists(publicDocument));
+            Assert.Equal("preserve content", File.ReadAllText(Path.Combine(unsorted, "Public document.txt")));
             Assert.Contains(log.Lines, line => line.Contains(shared));
             Assert.Contains(log.Lines, line => line.Contains("Ярлыков сгруппировано — 2"));
         }
@@ -170,7 +171,7 @@ public class DesktopCleanupServiceTests
             Assert.Equal(1, cleaner.CleanCommon(Path.Combine(root, "Unsorted")));
             Assert.True(File.Exists(steamLink));
             Assert.Contains(log.Lines, line => line.Contains(steamLink));
-            Assert.Contains(log.Lines, line => line.Contains("ничего не перемещено"));
+            Assert.Contains(log.Lines, line => line.Contains("объектов в папку разбора — 1"));
             Assert.Contains(log.Lines, line => line.Contains("Ошибок переноса: 1"));
         }
         finally
@@ -282,6 +283,38 @@ public class DesktopCleanupServiceTests
         public bool IsBroken(string path, UnsortedOrderer.Services.Desktop.DesktopShortcut shortcut) =>
             !Directory.Exists(shortcut.Target);
         public void CreateFolderLink(string path, string targetDirectory) { }
+    }
+
+    [Fact]
+    public void Checks_links_across_both_desktops_before_moving_files_and_keeps_same_named_files()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var personal = Directory.CreateDirectory(Path.Combine(root.FullName, "Personal")).FullName;
+            var shared = Directory.CreateDirectory(Path.Combine(root.FullName, "Public")).FullName;
+            var folder = Directory.CreateDirectory(Path.Combine(personal, "Portable")).FullName;
+            var link = Path.Combine(shared, "Portable.lnk");
+            File.WriteAllText(link, folder);
+            File.WriteAllText(Path.Combine(personal, "same.conf"), "personal");
+            File.WriteAllText(Path.Combine(shared, "same.conf"), "public");
+            var unsorted = Path.Combine(root.FullName, "Unsorted");
+            var sorted = Path.Combine(root.FullName, "Sorted");
+            var cleaner = new DesktopCleanupService(new RecordingLog(), personal, new ApplicationLocation(root.FullName, null),
+                new LocalFolderShortcutStore(), commonDesktopPath: shared);
+
+            Assert.Equal(0, cleaner.CleanSelected(unsorted, sorted, personal: true, common: true));
+
+            Assert.True(Directory.Exists(Path.Combine(unsorted, "Portable")));
+            Assert.True(File.Exists(link));
+            Assert.False(Directory.Exists(Path.Combine(sorted, "_ToDelete")));
+            Assert.Equal("personal", File.ReadAllText(Path.Combine(unsorted, "same.conf")));
+            Assert.Equal("public", File.ReadAllText(Path.Combine(unsorted, "same (1).conf")));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
     }
 
     [Fact]
