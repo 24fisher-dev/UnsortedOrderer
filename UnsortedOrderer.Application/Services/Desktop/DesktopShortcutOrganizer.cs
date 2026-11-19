@@ -11,11 +11,15 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
         name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.UtilitiesFolder, StringComparison.OrdinalIgnoreCase);
 
-    public void Group(string desktop, string source, string? destination)
+    internal (int Moved, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links)
     {
-        foreach (var link in Directory.EnumerateFiles(desktop).Where(IsShortcut).ToArray())
+        var moved = 0;
+        var left = 0;
+        var errors = 0;
+        foreach (var link in links)
         {
-            TryShortcutOperation(link, () =>
+            var didMove = false;
+            var completed = TryShortcutOperation(link, () =>
             {
                 if ((File.GetAttributes(link) & FileAttributes.ReparsePoint) != 0)
                     return;
@@ -25,15 +29,25 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
                     return;
 
                 var folder = Path.Combine(desktop, category);
-                if (ApplicationLocation.ContainsPath(source, folder) ||
-                    destination is not null && ApplicationLocation.SamePath(destination, folder) ||
-                    File.Exists(folder) ||
+                if (ApplicationLocation.ContainsPath(folder, source) ||
+                    destination is not null && ApplicationLocation.ContainsPath(folder, destination))
+                    throw new IOException($"Группа совпадает с папкой сортировки: «{folder}».");
+                if (File.Exists(folder) ||
                     Directory.Exists(folder) && (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
-                    return;
+                    throw new IOException($"Нет безопасной папки для группы «{folder}».");
+
                 FileUtilities.MoveFile(link, folder);
-                log.WriteLine($"Desktop shortcut moved to {category}: {Path.GetFileName(link)}");
+                didMove = true;
+                log.WriteLine($"Ярлык перенесён в {category}: «{link}».");
             });
+            if (didMove)
+                moved++;
+            else
+                left++;
+            if (!completed)
+                errors++;
         }
+        return (moved, left, errors);
     }
 
     public void EnsureFolderLink(string desktop, string name, string target)
@@ -64,17 +78,19 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
         TryShortcutOperation(link, () => store.CreateFolderLink(link, target));
     }
 
-    private void TryShortcutOperation(string path, Action operation)
+    private bool TryShortcutOperation(string path, Action operation)
     {
         try
         {
             operation();
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or COMException
             or ArgumentException or System.Reflection.TargetInvocationException
             or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
         {
-            log.WriteLine($"Desktop shortcut skipped: {Path.GetFileName(path)} ({ex.Message})");
+            log.WriteLine($"Не удалось обработать ярлык «{path}»: {ex.Message}");
+            return false;
         }
     }
 

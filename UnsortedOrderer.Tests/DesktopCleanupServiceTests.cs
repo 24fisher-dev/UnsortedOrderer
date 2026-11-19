@@ -84,6 +84,108 @@ public class DesktopCleanupServiceTests
         }
     }
 
+    [Fact]
+    public void Desktop_cleanup_is_available_when_app_runs_from_downloads()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var desktop = Directory.CreateDirectory(Path.Combine(root, "Personal")).FullName;
+        var downloads = Directory.CreateDirectory(Path.Combine(root, "Downloads")).FullName;
+        var unsorted = Path.Combine(root, "Unsorted");
+        var document = Path.Combine(desktop, "notes.txt");
+        var log = new RecordingLog();
+        try
+        {
+            File.WriteAllText(document, "desktop notes");
+            var cleaner = new DesktopCleanupService(log, desktop, new ApplicationLocation(downloads, null));
+
+            Assert.True(cleaner.CanClean(unsorted));
+            cleaner.Clean(unsorted);
+
+            Assert.False(File.Exists(document));
+            Assert.Equal("desktop notes", File.ReadAllText(Path.Combine(unsorted, "notes.txt")));
+            Assert.Contains(log.Lines, line => line.Contains(desktop));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Personal_and_shared_desktops_are_processed_separately()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var personal = Directory.CreateDirectory(Path.Combine(root, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
+        var unsorted = Path.Combine(root, "Unsorted");
+        var log = new RecordingLog();
+        try
+        {
+            var personalLink = Path.Combine(personal, "CPUID CPU-Z.lnk");
+            var sharedLink = Path.Combine(shared, "CPUID HWMonitor.lnk");
+            var commonGame = Path.Combine(shared, "Need for Speed.lnk");
+            var publicDocument = Path.Combine(shared, "Public document.txt");
+            var personalSystemFile = Path.Combine(personal, "desktop.ini");
+            foreach (var path in new[] { personalLink, sharedLink, commonGame, publicDocument, personalSystemFile })
+                File.WriteAllText(path, "preserve content");
+            var cleaner = new DesktopCleanupService(log, personal, new ApplicationLocation(root, null),
+                new TestShortcutStore(new Dictionary<string, string>
+                {
+                    [personalLink] = @"C:\Program Files\CPUID\CPU-Z\cpuz_x64.exe",
+                    [sharedLink] = @"C:\Program Files\CPUID\HWMonitor\HWMonitor.exe",
+                    [commonGame] = @"D:\Need for Speed\NFSHP.exe"
+                }), commonDesktopPath: shared);
+
+            Assert.Equal(0, cleaner.Clean(unsorted));
+            Assert.True(File.Exists(Path.Combine(personal, "Utilities", "CPUID CPU-Z.lnk")));
+            Assert.True(File.Exists(sharedLink));
+            Assert.True(File.Exists(personalSystemFile));
+
+            Assert.Equal(0, cleaner.CleanCommon(unsorted));
+            Assert.True(File.Exists(Path.Combine(shared, "Utilities", "CPUID HWMonitor.lnk")));
+            Assert.True(File.Exists(Path.Combine(shared, "Games", "Need for Speed.lnk")));
+            Assert.True(File.Exists(publicDocument));
+            Assert.Contains(log.Lines, line => line.Contains(shared));
+            Assert.Contains(log.Lines, line => line.Contains("Ярлыков сгруппировано — 2"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_blocked_shortcut_group_preserves_the_link_and_reports_failure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var shared = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
+        try
+        {
+            var steamLink = Path.Combine(shared, "Steam.url");
+            File.WriteAllText(steamLink, "[InternetShortcut]\nURL=steam://rungameid/250820");
+            File.WriteAllText(Path.Combine(shared, "Games"), "not a directory");
+            var log = new RecordingLog();
+            var cleaner = new DesktopCleanupService(log, "", new ApplicationLocation(root, null), commonDesktopPath: shared);
+
+            Assert.Equal(1, cleaner.CleanCommon(Path.Combine(root, "Unsorted")));
+            Assert.True(File.Exists(steamLink));
+            Assert.Contains(log.Lines, line => line.Contains(steamLink));
+            Assert.Contains(log.Lines, line => line.Contains("ничего не перемещено"));
+            Assert.Contains(log.Lines, line => line.Contains("Ошибок переноса: 1"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private sealed class TestShortcutStore(IReadOnlyDictionary<string, string> targets) : UnsortedOrderer.Services.Desktop.IDesktopShortcutStore
+    {
+        public UnsortedOrderer.Services.Desktop.DesktopShortcut? Read(string path) =>
+            targets.TryGetValue(path, out var target) ? new(target) : null;
+        public void CreateFolderLink(string path, string targetDirectory) { }
+    }
+
     private sealed class RecordingLog : IMessageWriter
     {
         public List<string> Lines { get; } = [];

@@ -13,7 +13,9 @@ internal sealed class CleanupForm : Form
 {
     private readonly AppSettings _settings;
     private readonly WindowLog _log = new();
+    private readonly Services.DesktopCleanupService _desktopService;
     private readonly CheckBox _desktop = new() { Text = "Перенести содержимое рабочего стола на сортировку", AutoSize = true };
+    private readonly CheckBox _commonDesktop = new() { Text = "Группировать ярлыки общего рабочего стола (для всех пользователей)", AutoSize = true };
     private readonly CheckBox _downloads = new() { Text = "Перенести содержимое папки «Загрузки» на сортировку", AutoSize = true };
     private readonly Label _trashStatus = new() { AutoSize = true, Visible = false };
     private readonly FlowLayoutPanel _trashActions = new() { Dock = DockStyle.Fill, AutoSize = true, Visible = false };
@@ -43,6 +45,7 @@ internal sealed class CleanupForm : Form
     public CleanupForm(AppSettings settings, Version currentVersion)
     {
         _settings = settings;
+        _desktopService = new Services.DesktopCleanupService(_log);
         using var iconResource = typeof(CleanupForm).Assembly.GetManifestResourceStream("UnsortedOrderer.ApplicationIcon");
         if (iconResource is not null)
         {
@@ -58,13 +61,13 @@ internal sealed class CleanupForm : Form
 
         var paths = new TextBox
         {
-            Text = $"Папка для разбора   {_settings.SourceDirectory}\r\nРазложить по папкам в   {_settings.DestinationRoot}",
+            Text = $"Папка для разбора   {_settings.SourceDirectory}\r\nРазложить по папкам в   {_settings.DestinationRoot}\r\nЛичный рабочий стол   {_desktopService.DesktopPath}\r\nОбщий рабочий стол   {_desktopService.CommonDesktopPath}",
             AccessibleName = "Папки очистки",
             Multiline = true,
             WordWrap = false,
             ReadOnly = true,
             ScrollBars = ScrollBars.Horizontal,
-            Height = 57,
+            Height = 88,
             Dock = DockStyle.Fill
         };
         var quarantineExtensions = _settings.DeletedExtensions
@@ -83,14 +86,14 @@ internal sealed class CleanupForm : Form
 
         var layout = new TableLayoutPanel
         {
-            ColumnCount = 1, RowCount = 11, Dock = DockStyle.Fill, Padding = new Padding(14)
+            ColumnCount = 1, RowCount = 12, Dock = DockStyle.Fill, Padding = new Padding(14)
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var row = 0; row < layout.RowCount; row++)
         {
-            layout.RowStyles.Add(row == 7 ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(row == 8 ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
         }
-        Control[] controls = [_updateLink, paths, _desktop, _downloads, warning, _status, _progress, _journal, _trashStatus, _trashActions, buttons];
+        Control[] controls = [_updateLink, paths, _desktop, _commonDesktop, _downloads, warning, _status, _progress, _journal, _trashStatus, _trashActions, buttons];
         for (var row = 0; row < controls.Length; row++)
         {
             layout.Controls.Add(controls[row], 0, row);
@@ -118,8 +121,9 @@ internal sealed class CleanupForm : Form
 
         var cleanDesktop = _desktop.Enabled && _desktop.Checked;
         var cleanDownloads = _downloads.Enabled && _downloads.Checked;
+        var groupCommonDesktop = _commonDesktop.Enabled && _commonDesktop.Checked;
         _running = true;
-        _desktop.Enabled = _downloads.Enabled = _start.Enabled = _exit.Enabled = false;
+        _desktop.Enabled = _commonDesktop.Enabled = _downloads.Enabled = _start.Enabled = _exit.Enabled = false;
         _progress.Style = ProgressBarStyle.Marquee;
         _status.Text = "Подготовка к очистке…";
         _logTimer.Start();
@@ -145,7 +149,7 @@ internal sealed class CleanupForm : Form
                 // Services and statistics are scoped to one run.
                 using var provider = BuildServices();
                 return provider.GetRequiredService<FileOrganizerApplication>()
-                    .Run(cleanDesktop, cleanDownloads, ((IProgress<CleanupStage>)stage).Report);
+                    .Run(cleanDesktop, cleanDownloads, ((IProgress<CleanupStage>)stage).Report, groupCommonDesktop);
             });
         }
         catch (Exception exception)
@@ -175,13 +179,15 @@ internal sealed class CleanupForm : Form
 
     private void ResetForm()
     {
-        _desktop.Enabled = new Services.DesktopCleanupService(_log).CanClean(_settings.SourceDirectory);
+        _desktop.Enabled = _desktopService.CanClean(_settings.SourceDirectory);
+        _commonDesktop.Enabled = _desktopService.CanCleanCommon(_settings.SourceDirectory);
+        _commonDesktop.Checked = false;
         _downloads.Enabled = new Services.DownloadsCleanupService(_log).CanClean(_settings.SourceDirectory);
         _desktop.Checked = _desktop.Enabled;
         _downloads.Checked = _downloads.Enabled;
         _desktop.Text = _desktop.Enabled
             ? "Перенести содержимое рабочего стола на сортировку"
-            : "Рабочий стол — доступно при запуске программы с рабочего стола";
+            : "Личный рабочий стол недоступен или уже выбран как папка разбора";
         _downloads.Text = _downloads.Enabled
             ? "Перенести содержимое папки «Загрузки» на сортировку"
             : "Папка «Загрузки» уже выбрана для разбора или недоступна";

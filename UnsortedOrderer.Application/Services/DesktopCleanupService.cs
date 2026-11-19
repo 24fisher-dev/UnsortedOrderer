@@ -9,76 +9,124 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
     private readonly IMessageWriter _messageWriter;
 
     private readonly string _desktopPath;
+    private readonly string _commonDesktopPath;
     private readonly ApplicationLocation _application;
     private readonly DesktopShortcutOrganizer _shortcuts;
     private readonly Action<FileSystemInfo, string> _moveEntry;
 
     public DesktopCleanupService(IMessageWriter messageWriter)
         : this(messageWriter, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-            ApplicationLocation.Current)
+            ApplicationLocation.Current,
+            commonDesktopPath: Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory))
     {
     }
 
     public DesktopCleanupService(IMessageWriter messageWriter, string desktopPath, ApplicationLocation application,
-        IDesktopShortcutStore? shortcutStore = null, Action<FileSystemInfo, string>? moveEntry = null)
+        IDesktopShortcutStore? shortcutStore = null, Action<FileSystemInfo, string>? moveEntry = null,
+        string? commonDesktopPath = null)
     {
         _messageWriter = messageWriter;
         _desktopPath = desktopPath;
+        _commonDesktopPath = commonDesktopPath ?? string.Empty;
         _application = application;
         _shortcuts = new DesktopShortcutOrganizer(shortcutStore ?? new DesktopShortcutStore(), messageWriter);
         _moveEntry = moveEntry ?? MoveEntry;
     }
 
-    public bool CanClean(string destinationPath)
-    {
-        var desktopPath = _desktopPath;
-        return !string.IsNullOrWhiteSpace(destinationPath)
-            && Directory.Exists(desktopPath)
-            && !ApplicationLocation.SamePath(desktopPath, destinationPath)
-            && _application.IsInside(desktopPath);
-    }
+    public string DesktopPath => _desktopPath;
+    public string CommonDesktopPath => _commonDesktopPath;
 
-    public void Clean(string destinationPath, string? sortedPath = null)
+    public bool CanClean(string destinationPath) => CanProcessRoot(_desktopPath, destinationPath);
+
+    public bool CanCleanCommon(string destinationPath) => CanProcessRoot(_commonDesktopPath, destinationPath)
+        && (string.IsNullOrWhiteSpace(_desktopPath) ||
+            !ApplicationLocation.SamePath(_desktopPath, _commonDesktopPath));
+
+    private static bool CanProcessRoot(string desktopPath, string unsortedPath) =>
+        !string.IsNullOrWhiteSpace(unsortedPath)
+        && Directory.Exists(desktopPath)
+        && !ApplicationLocation.ContainsPath(unsortedPath, desktopPath);
+
+    public int Clean(string destinationPath, string? sortedPath = null) =>
+        CleanRoot(_desktopPath, destinationPath, sortedPath, shared: false);
+
+    public int CleanCommon(string destinationPath, string? sortedPath = null) =>
+        CleanRoot(_commonDesktopPath, destinationPath, sortedPath, shared: true);
+
+    private int CleanRoot(string desktopPath, string unsortedPath, string? sortedPath, bool shared)
     {
-        if (!CanClean(destinationPath))
+        var label = shared ? "Общий рабочий стол" : "Личный рабочий стол";
+        if (!(shared ? CanCleanCommon(unsortedPath) : CanClean(unsortedPath)) ||
+            (sortedPath is not null && ApplicationLocation.ContainsPath(sortedPath, desktopPath)))
         {
-            return;
+            _messageWriter.WriteLine($"{label} не обработан: путь недоступен или пересекается с папками сортировки («{desktopPath}»).");
+            return 1;
         }
 
-        var desktopPath = _desktopPath;
-        Directory.CreateDirectory(destinationPath);
-
-        var skipped = 0;
-        foreach (var entry in new DirectoryInfo(desktopPath).EnumerateFileSystemInfos().ToArray())
+        _messageWriter.WriteLine($"{label}: «{desktopPath}».");
+        FileSystemInfo[] entries;
+        try
         {
-            if (IsShortcut(entry) || _application.ProtectsFile(entry.FullName) ||
-                (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
-                    || DesktopShortcutOrganizer.IsGroupFolder(entry.Name)
-                    || ApplicationLocation.ContainsPath(entry.FullName, destinationPath)
-                    || sortedPath is not null && ApplicationLocation.ContainsPath(entry.FullName, sortedPath))))
-            {
-                continue;
-            }
+            entries = new DirectoryInfo(desktopPath).GetFileSystemInfos();
+            if (!shared)
+                Directory.CreateDirectory(unsortedPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _messageWriter.WriteLine($"Не удалось прочитать или подготовить папки «{desktopPath}» → «{unsortedPath}»: {ex.Message}");
+            return 1;
+        }
 
-            var destination = EnsureUniquePath(Path.Combine(destinationPath, entry.Name));
-            try
+        var moved = 0;
+        var failed = 0;
+        if (!shared)
+        {
+            foreach (var entry in entries)
             {
-                _moveEntry(entry, destination);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                skipped++;
-                _messageWriter.WriteLine($"Не удалось полностью перенести «{entry.FullName}» → «{destination}»: {ex.Message}");
+                if (IsShortcut(entry) || entry.Name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)
+                    || _application.ProtectsFile(entry.FullName) ||
+                    (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
+                        || DesktopShortcutOrganizer.IsGroupFolder(entry.Name)
+                        || ApplicationLocation.ContainsPath(entry.FullName, unsortedPath)
+                        || sortedPath is not null && ApplicationLocation.ContainsPath(entry.FullName, sortedPath))))
+                    continue;
+
+                var destination = EnsureUniquePath(Path.Combine(unsortedPath, entry.Name));
+                try
+                {
+                    if (entry.LinkTarget is not null)
+                    {
+                        _messageWriter.WriteLine($"Ссылка файловой системы оставлена на месте: «{entry.FullName}».");
+                        continue;
+                    }
+
+                    _moveEntry(entry, destination);
+                    moved++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    failed++;
+                    _messageWriter.WriteLine($"Не удалось полностью перенести «{entry.FullName}» → «{destination}»: {ex.Message}");
+                }
             }
         }
 
-        _shortcuts.Group(desktopPath, destinationPath, sortedPath);
-        _messageWriter.WriteLine(skipped == 0 ? "Рабочий стол обработан." : $"Рабочий стол обработан. Ошибок переноса: {skipped}.");
+        var shortcuts = _shortcuts.Group(desktopPath, unsortedPath, sortedPath, entries.Where(IsShortcut).Select(entry => entry.FullName));
+        failed += shortcuts.Errors;
+
+        if (moved == 0 && shortcuts.Moved == 0)
+            _messageWriter.WriteLine($"{label}: ничего не перемещено.");
+        _messageWriter.WriteLine($"{label}: объектов в папку разбора — {moved}. Ярлыков сгруппировано — {shortcuts.Moved}. " +
+            $"Ярлыков оставлено — {shortcuts.Left}. Ошибок переноса: {failed}.");
         _messageWriter.WriteLine(string.Empty);
+        return failed;
     }
 
     public void CreateFolderShortcuts(string unsortedPath, string sortedPath)
     {
+        if (!CanClean(unsortedPath) || ApplicationLocation.ContainsPath(sortedPath, _desktopPath))
+            return;
+
         _shortcuts.EnsureFolderLink(_desktopPath, "Unsorted", unsortedPath);
         _shortcuts.EnsureFolderLink(_desktopPath, "Sorted", sortedPath);
     }
