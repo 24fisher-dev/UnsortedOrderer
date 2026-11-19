@@ -4,7 +4,7 @@ public interface IArchiveService
 {
     ArchiveHandlingResult HandleArchiveFile(string archivePath, string categoryName);
 
-    void RecordPrintingFileMove(string sourcePath, string destinationDirectory);
+    void RecordCompanionFileMove(string sourcePath, string destinationDirectory, string categoryName);
 
     string HandleArchive(string archivePath, string destinationDirectory);
 }

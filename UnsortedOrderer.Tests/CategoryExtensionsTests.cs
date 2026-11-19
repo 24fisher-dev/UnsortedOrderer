@@ -41,6 +41,8 @@ public class CategoryExtensionsTests
             new MusicalInstrumentsCategory("MusicalInstruments"),
             new EBooksCategory("EBooks"),
             new DocumentsCategory(),
+            new DataCategory(),
+            new GpsTracksCategory(),
             new WebCategory("Web"),
             new GraphicsCategory("Graphics"),
             new VideosCategory(
