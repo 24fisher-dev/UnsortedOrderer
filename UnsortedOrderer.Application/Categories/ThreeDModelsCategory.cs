@@ -5,6 +5,8 @@ public sealed class ThreeDModelsCategory : FileCategory
     private static readonly string[] ModelExtensions =
     [
         ".obj",
+        ".f3d",
+        ".skp",
         ".fbx",
         ".3ds",
         ".dae",

@@ -23,7 +23,10 @@ Standalone Windows Forms application for organizing a folder full of unsorted fi
 - Small images (icons, previews, logos) go to the `images` subfolder inside `ImagesFolderName` without date breakdown. Size is determined by resolution (up to 512 px on the longer side) and file size (up to ~300 KB for small images).
 - Documents, videos, 3D models, archives, digital certificates, firmware files, metadata, and software are sent to dedicated folders.
 - STL, 3MF, G-code and binary G-code go to `3DPrinting/<year>/<month>` using the file creation date (last modified date if creation is older than 1980). Recognized Bambu Studio and OrcaSlicer filament preset JSONs follow the same rule. Other JSONs, including printer and process presets, keep their existing routing. Generic 3D formats such as OBJ and STEP still go to `3DModels`.
-- OpenDocument spreadsheets and presentations (`.ods`, `.odp`), Aseprite projects (`.aseprite`), and archives (`.tgz`, `.zst`) are recognized.
+- Excel (`.xls`, `.xlsx`, `.xlsm`, `.xlsb`), `.csv` and `.ods` go to `Data`. Folders containing data XML files and optionally spreadsheets or ordinary folder metadata are moved intact to `Data`. Existing software/driver package rules and routing of loose XML are unchanged.
+- Guitar Pro 6 `.gpx` containers (`BCFS`/`BCFZ`) go to `Instruments`, GPS Exchange XML goes to `GPX`, and unrecognized `.gpx` stays in the unknown category.
+- Fusion and SketchUp (`.f3d`, `.skp`) go to `3DModels`, `.svg` and `.tgs` go to the graphics category, and `.thm` and `.winmd` go to metadata. `.scr` goes to software only when it has a Windows PE header. Generic `.data`, `.prn`, unrelated JSON, and files without extensions are not guessed.
+- OpenDocument presentations (`.odp`), Aseprite projects (`.aseprite`), and archives (`.tgz`, `.zst`) are recognized.
 - HTML files and browser shortcuts (`.html`, `.htm`, `.xhtml`, `.mhtml`, `.mht`, `.url`, `.webloc`, `.website`) move to `WebFolderName`.
 - Graphics editor project files (for example, `.psd`, `.psb`, `.ai`, `.eps`, `.xcf`, `.kra`, `.ora`, `.clip`, `.afphoto`, `.afdesign`, `.afpub`, `.cdr`, `.sai`, `.mdp`, `.pdn`, `.pspimage`, `.reb`, `.sketch`, `.fig`) move to `GraphicsFolderName`.
 - E-books (`.epub`, `.fb2`, `.mobi`, `.azw3`, `.djvu`, `.cbr`, `.cbz`, `.ibooks`, `.kfx`) move to the `EBooksFolderName` folder.

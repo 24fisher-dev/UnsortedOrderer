@@ -6,6 +6,8 @@ public sealed class GraphicsCategory : FileCategory
     [
         ".psd",
         ".aseprite",
+        ".svg",
+        ".tgs",
         ".psb",
         ".ai",
         ".eps",

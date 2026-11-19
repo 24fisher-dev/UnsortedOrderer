@@ -142,7 +142,7 @@ public sealed class CleanupRunTests : IDisposable
     }
 
     [Theory]
-    [InlineData("table.ods", "Documents")]
+    [InlineData("table.ods", "Data")]
     [InlineData("slides.odp", "Documents")]
     [InlineData("art.aseprite", "Graphics")]
     [InlineData("backup.tgz", "Archives")]

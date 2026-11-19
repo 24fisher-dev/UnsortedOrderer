@@ -79,6 +79,8 @@ public static class ServiceCollectionExtensions
                 new MetadataCategory(appSettings.MetadataFolderName),
                 new DriversCategory(appSettings.DriversFolderName),
                 new SoftCategory(appSettings.SoftFolderName, softwareDistributivesDetector),
+                new DataCategory(),
+                new GpsTracksCategory(),
                 new UnknownCategory(appSettings.UnknownFolderName)
             };
         });

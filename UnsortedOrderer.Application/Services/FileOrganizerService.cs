@@ -1,5 +1,6 @@
 using UnsortedOrderer.Application.Contracts.Services.Categories;
 using UnsortedOrderer.Application.Contracts.Services.Categories.Photo;
+using UnsortedOrderer.Application.Services.Categories;
 using UnsortedOrderer.Cache;
 using UnsortedOrderer.Categories;
 using UnsortedOrderer.Contracts.Categories;
@@ -202,6 +203,21 @@ public sealed class FileOrganizerService
         if (extension == ".json" && _printingCategory?.IsMaterialProfile(filePath) == true)
         {
             return _printingCategory;
+        }
+
+        if (extension == ".gpx")
+        {
+            return FileFormatProbe.ReadGpx(filePath) switch
+            {
+                GpxFormat.GuitarPro => _categories.OfType<MusicalInstrumentsCategory>().FirstOrDefault(),
+                GpxFormat.Navigation => _categories.OfType<GpsTracksCategory>().FirstOrDefault(),
+                _ => null
+            };
+        }
+
+        if (extension == ".scr" && FileFormatProbe.IsWindowsExecutable(filePath))
+        {
+            return _categories.OfType<SoftCategory>().FirstOrDefault();
         }
 
         var parsedCategory = TryResolveWithParsingServices(filePath, extension);
