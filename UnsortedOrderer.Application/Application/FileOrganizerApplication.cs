@@ -42,6 +42,8 @@ public sealed class FileOrganizerApplication
         var desktopAvailable = cleanDesktop && _desktop.CanClean(_settings.SourceDirectory);
         if (desktopAvailable || groupCommonDesktop)
             onStage?.Invoke(CleanupStage.Desktop);
+        if (groupCommonDesktop)
+            desktopErrors += _desktop.CleanCommon(_settings.SourceDirectory, _settings.DestinationRoot);
         if (desktopAvailable)
             desktopErrors += _desktop.Clean(_settings.SourceDirectory, _settings.DestinationRoot);
         else if (cleanDesktop)
@@ -49,9 +51,6 @@ public sealed class FileOrganizerApplication
             _messageWriter.WriteLine("Личный рабочий стол недоступен или совпадает с папкой разбора. Перенос пропущен.");
             desktopErrors++;
         }
-        if (groupCommonDesktop)
-            desktopErrors += _desktop.CleanCommon(_settings.SourceDirectory, _settings.DestinationRoot);
-
         if (cleanDownloads && _downloads.CanClean(_settings.SourceDirectory))
         {
             onStage?.Invoke(CleanupStage.Downloads);

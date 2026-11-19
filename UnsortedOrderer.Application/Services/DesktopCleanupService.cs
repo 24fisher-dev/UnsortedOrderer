@@ -78,7 +78,10 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         }
 
         var moved = 0;
-        var failed = 0;
+        // A shortcut may point to a desktop file or directory this run is about to move.
+        // Judge its existing target before the import changes the original path.
+        var shortcuts = _shortcuts.Group(desktopPath, unsortedPath, sortedPath, entries.Where(IsShortcut).Select(entry => entry.FullName));
+        var failed = shortcuts.Errors;
         if (!shared)
         {
             foreach (var entry in entries)
@@ -111,9 +114,6 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
                 }
             }
         }
-
-        var shortcuts = _shortcuts.Group(desktopPath, unsortedPath, sortedPath, entries.Where(IsShortcut).Select(entry => entry.FullName));
-        failed += shortcuts.Errors;
 
         if (moved == 0 && shortcuts.Moved == 0 && shortcuts.Quarantined == 0)
             _messageWriter.WriteLine($"{label}: ничего не перемещено.");

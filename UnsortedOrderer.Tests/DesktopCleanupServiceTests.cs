@@ -250,6 +250,41 @@ public class DesktopCleanupServiceTests
     }
 
     [Fact]
+    public void Shortcut_is_not_quarantined_because_its_target_was_moved_in_the_same_run()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var desktop = Directory.CreateDirectory(Path.Combine(root, "Desktop")).FullName;
+        var portable = Directory.CreateDirectory(Path.Combine(desktop, "Portable")).FullName;
+        var unsorted = Path.Combine(root, "Unsorted");
+        var sorted = Path.Combine(root, "Sorted");
+        var link = Path.Combine(desktop, "Portable.lnk");
+        try
+        {
+            File.WriteAllText(link, portable);
+            var cleaner = new DesktopCleanupService(new RecordingLog(), desktop,
+                new ApplicationLocation(root, null), new LocalFolderShortcutStore());
+
+            Assert.Equal(0, cleaner.Clean(unsorted, sorted));
+
+            Assert.True(Directory.Exists(Path.Combine(unsorted, "Portable")));
+            Assert.True(File.Exists(link));
+            Assert.False(Directory.Exists(Path.Combine(sorted, "_ToDelete")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private sealed class LocalFolderShortcutStore : UnsortedOrderer.Services.Desktop.IDesktopShortcutStore
+    {
+        public UnsortedOrderer.Services.Desktop.DesktopShortcut Read(string path) => new(File.ReadAllText(path));
+        public bool IsBroken(string path, UnsortedOrderer.Services.Desktop.DesktopShortcut shortcut) =>
+            !Directory.Exists(shortcut.Target);
+        public void CreateFolderLink(string path, string targetDirectory) { }
+    }
+
+    [Fact]
     public void Windows_shortcut_probe_preserves_virtual_targets_and_network_paths()
     {
         if (!OperatingSystem.IsWindows()) return;
