@@ -143,7 +143,7 @@ internal sealed class CleanupForm : Form
         }
         catch (Exception exception)
         {
-            _log.WriteLine($"Ошибка очистки: {exception}");
+            _log.WriteLine($"Ошибка очистки: {exception.Message}");
         }
         finally
         {
