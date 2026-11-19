@@ -32,10 +32,11 @@ public sealed class FileOrganizerApplication
         bool cleanDownloads = false,
         Action<CleanupStage>? onStage = null)
     {
-        if (cleanDesktop && _desktop.CanClean(_settings.SourceDirectory))
+        var desktopWasCleaned = cleanDesktop && _desktop.CanClean(_settings.SourceDirectory);
+        if (desktopWasCleaned)
         {
             onStage?.Invoke(CleanupStage.Desktop);
-            _desktop.Clean(_settings.SourceDirectory);
+            _desktop.Clean(_settings.SourceDirectory, _settings.DestinationRoot);
         }
 
         if (cleanDownloads && _downloads.CanClean(_settings.SourceDirectory))
@@ -79,5 +80,10 @@ public sealed class FileOrganizerApplication
         _messageWriter.WriteLine("Starting organization...");
 
         _organizer.Organize();
+
+        if (desktopWasCleaned)
+        {
+            _desktop.CreateFolderShortcuts(_settings.SourceDirectory, _settings.DestinationRoot);
+        }
     }
 }
