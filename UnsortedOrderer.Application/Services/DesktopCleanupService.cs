@@ -1,21 +1,16 @@
-using System.Collections.Generic;
 using UnsortedOrderer.Contracts.Services;
 using UnsortedOrderer.Models;
+using UnsortedOrderer.Services.Desktop;
 
 namespace UnsortedOrderer.Services;
 
 public sealed class DesktopCleanupService : IDesktopCleanupService
 {
-    private static readonly HashSet<string> ShortcutExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".lnk",
-        ".url",
-    };
-
     private readonly IMessageWriter _messageWriter;
 
     private readonly string _desktopPath;
     private readonly ApplicationLocation _application;
+    private readonly DesktopShortcutOrganizer _shortcuts;
 
     public DesktopCleanupService(IMessageWriter messageWriter)
         : this(messageWriter, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
@@ -23,11 +18,13 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
     {
     }
 
-    public DesktopCleanupService(IMessageWriter messageWriter, string desktopPath, ApplicationLocation application)
+    public DesktopCleanupService(IMessageWriter messageWriter, string desktopPath, ApplicationLocation application,
+        IDesktopShortcutStore? shortcutStore = null)
     {
         _messageWriter = messageWriter;
         _desktopPath = desktopPath;
         _application = application;
+        _shortcuts = new DesktopShortcutOrganizer(shortcutStore ?? new DesktopShortcutStore(), messageWriter);
     }
 
     public bool CanClean(string destinationPath)
@@ -39,7 +36,7 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
             && _application.IsInside(desktopPath);
     }
 
-    public void Clean(string destinationPath)
+    public void Clean(string destinationPath, string? sortedPath = null)
     {
         if (!CanClean(destinationPath))
         {
@@ -53,7 +50,9 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         {
             if (IsShortcut(entry) || _application.ProtectsFile(entry.FullName) ||
                 (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
-                    || ApplicationLocation.ContainsPath(entry.FullName, destinationPath))))
+                    || DesktopShortcutOrganizer.IsGroupFolder(entry.Name)
+                    || ApplicationLocation.ContainsPath(entry.FullName, destinationPath)
+                    || sortedPath is not null && ApplicationLocation.ContainsPath(entry.FullName, sortedPath))))
             {
                 continue;
             }
@@ -62,14 +61,19 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
             MoveEntry(entry, destination);
         }
 
+        _shortcuts.Group(desktopPath, destinationPath, sortedPath);
         _messageWriter.WriteLine("Desktop cleaned.");
         _messageWriter.WriteLine(string.Empty);
     }
 
-    private static bool IsShortcut(FileSystemInfo entry)
+    public void CreateFolderShortcuts(string unsortedPath, string sortedPath)
     {
-        return entry is FileInfo fileInfo && ShortcutExtensions.Contains(fileInfo.Extension);
+        _shortcuts.EnsureFolderLink(_desktopPath, "Unsorted", unsortedPath);
+        _shortcuts.EnsureFolderLink(_desktopPath, "Sorted", sortedPath);
     }
+
+    private static bool IsShortcut(FileSystemInfo entry) =>
+        entry is FileInfo && DesktopShortcutOrganizer.IsShortcut(entry.FullName);
 
     private static string EnsureUniquePath(string destinationPath)
     {

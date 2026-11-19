@@ -92,13 +92,23 @@ public sealed class DataAndGpxSortingTests : IDisposable
     [InlineData("script.scr", "Unknown/scr")]
     [InlineData("dump.data", "Unknown/data")]
     [InlineData("dump.json", "Unknown/json")]
+    [InlineData("font.woff2", "Fonts")]
+    [InlineData("diagram.drawio", "Diagrams")]
+    [InlineData("database.sqlite3", "Databases")]
+    [InlineData("map.kmz", "Maps")]
+    [InlineData("project.mpp", "ProjectPlans")]
+    [InlineData("table.parquet", "Data")]
+    [InlineData("drawing.dxf", "3DModels")]
+    [InlineData("resin.photon", "3DPrinting")]
     [InlineData("spool.prn", "Unknown/prn")]
     [InlineData("README", "Unknown/no-extension")]
     public void Known_extensions_are_classified_and_ambiguous_ones_are_preserved(string name, string folder)
     {
         Put(name, "not an executable");
         Sort();
-        Assert.True(File.Exists(Path.Combine(Destination, folder, name)));
+        Assert.True(folder == "3DPrinting"
+            ? Directory.EnumerateFiles(Path.Combine(Destination, folder), name, SearchOption.AllDirectories).Any()
+            : File.Exists(Path.Combine(Destination, folder, name)));
     }
 
     [Fact]

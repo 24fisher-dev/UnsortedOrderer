@@ -6,7 +6,7 @@ public sealed class ThreeDModelsCategory : FileCategory
     [
         ".obj",
         ".f3d",
-        ".skp",
+        ".skp", ".dxf", ".dwg", ".3dm", ".sldprt", ".sldasm", ".ipt", ".iam", ".fcstd",
         ".fbx",
         ".3ds",
         ".dae",

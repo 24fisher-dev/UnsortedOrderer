@@ -217,6 +217,10 @@ public sealed class CleanupRunTests : IDisposable
     {
         public bool CanClean(string destinationPath) => available;
 
+        public void Clean(string destinationPath, string? sortedPath) => Clean(destinationPath);
+
+        public void CreateFolderShortcuts(string unsortedPath, string sortedPath) { }
+
         public void Clean(string destinationPath)
         {
             if (fail)

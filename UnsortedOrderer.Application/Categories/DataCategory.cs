@@ -4,7 +4,7 @@ using UnsortedOrderer.Services;
 
 namespace UnsortedOrderer.Categories;
 
-public sealed class DataCategory() : FileCategory("Data", "Data", [".xls", ".xlsx", ".xlsm", ".xlsb", ".csv", ".ods"]),
+public sealed class DataCategory() : FileCategory("Data", "Data", [".xls", ".xlsx", ".xlsm", ".xlsb", ".csv", ".ods", ".tsv", ".parquet", ".feather", ".avro"]),
     INonSplittableDirectoryCategory
 {
     public bool IsNonSplittableDirectory(string path)

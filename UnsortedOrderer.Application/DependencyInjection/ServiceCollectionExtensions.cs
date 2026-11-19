@@ -80,6 +80,11 @@ public static class ServiceCollectionExtensions
                 new DriversCategory(appSettings.DriversFolderName),
                 new SoftCategory(appSettings.SoftFolderName, softwareDistributivesDetector),
                 new DataCategory(),
+                new FontsCategory(),
+                new DiagramsCategory(),
+                new DatabasesCategory(),
+                new MapsCategory(),
+                new ProjectPlansCategory(),
                 new GpsTracksCategory(),
                 new UnknownCategory(appSettings.UnknownFolderName)
             };

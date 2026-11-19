@@ -5,7 +5,7 @@ public sealed class GraphicsCategory : FileCategory
     private static readonly string[] GraphicsExtensions =
     [
         ".psd",
-        ".aseprite",
+        ".aseprite", ".xd", ".sai2", ".xbm",
         ".svg",
         ".tgs",
         ".psb",
