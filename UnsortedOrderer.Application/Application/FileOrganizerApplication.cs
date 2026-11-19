@@ -32,17 +32,25 @@ public sealed class FileOrganizerApplication
     public int Run(
         bool cleanDesktop = false,
         bool cleanDownloads = false,
-        Action<CleanupStage>? onStage = null)
+        Action<CleanupStage>? onStage = null,
+        bool groupCommonDesktop = false)
     {
         if (ApplicationLocation.ContainsPath(_settings.DestinationRoot, _settings.SourceDirectory))
             throw new IOException("Папка разбора не может находиться внутри папки назначения.");
 
-        var desktopWasCleaned = cleanDesktop && _desktop.CanClean(_settings.SourceDirectory);
-        if (desktopWasCleaned)
-        {
+        var desktopErrors = 0;
+        var desktopAvailable = cleanDesktop && _desktop.CanClean(_settings.SourceDirectory);
+        if (desktopAvailable || groupCommonDesktop)
             onStage?.Invoke(CleanupStage.Desktop);
-            _desktop.Clean(_settings.SourceDirectory, _settings.DestinationRoot);
+        if (desktopAvailable)
+            desktopErrors += _desktop.Clean(_settings.SourceDirectory, _settings.DestinationRoot);
+        else if (cleanDesktop)
+        {
+            _messageWriter.WriteLine("Личный рабочий стол недоступен или совпадает с папкой разбора. Перенос пропущен.");
+            desktopErrors++;
         }
+        if (groupCommonDesktop)
+            desktopErrors += _desktop.CleanCommon(_settings.SourceDirectory, _settings.DestinationRoot);
 
         if (cleanDownloads && _downloads.CanClean(_settings.SourceDirectory))
         {
@@ -80,12 +88,20 @@ public sealed class FileOrganizerApplication
 
         var failedEntries = _organizer.Organize();
 
-        if (desktopWasCleaned)
+        if (desktopAvailable)
         {
-            _desktop.CreateFolderShortcuts(_settings.SourceDirectory, _settings.DestinationRoot);
+            try
+            {
+                _desktop.CreateFolderShortcuts(_settings.SourceDirectory, _settings.DestinationRoot);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                desktopErrors++;
+                _messageWriter.WriteLine($"Не удалось создать ярлыки Unsorted и Sorted: {ex.Message}");
+            }
         }
 
-        return failedEntries;
+        return failedEntries + desktopErrors;
     }
 
     public void ClearQuarantine()

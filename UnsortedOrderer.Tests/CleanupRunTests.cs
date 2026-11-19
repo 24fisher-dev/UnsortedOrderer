@@ -41,6 +41,19 @@ public sealed class CleanupRunTests : IDisposable
     }
 
     [Fact]
+    public void Common_desktop_requires_explicit_selection_and_reports_failures()
+    {
+        var desktop = new CleanupStub("desktop.txt");
+        using var provider = BuildRun(desktop, new CleanupStub("download.txt"), new Log());
+        var app = provider.GetRequiredService<FileOrganizerApplication>();
+
+        Assert.Equal(0, app.Run(cleanDesktop: true));
+        Assert.Equal(0, desktop.CommonCalls);
+        Assert.Equal(1, app.Run(groupCommonDesktop: true));
+        Assert.Equal(1, desktop.CommonCalls);
+    }
+
+    [Fact]
     public void A_new_run_does_not_keep_previous_statistics()
     {
         Directory.CreateDirectory(Source);
@@ -308,7 +321,20 @@ public sealed class CleanupRunTests : IDisposable
     {
         public bool CanClean(string destinationPath) => available;
 
-        public void Clean(string destinationPath, string? sortedPath) => Clean(destinationPath);
+        public int Clean(string destinationPath, string? sortedPath)
+        {
+            if (!CanClean(destinationPath))
+                return 0;
+            Clean(destinationPath);
+            return 0;
+        }
+
+        public int CommonCalls { get; private set; }
+        public int CleanCommon(string destinationPath, string? sortedPath)
+        {
+            CommonCalls++;
+            return 1;
+        }
 
         public void CreateFolderShortcuts(string unsortedPath, string sortedPath) { }
 

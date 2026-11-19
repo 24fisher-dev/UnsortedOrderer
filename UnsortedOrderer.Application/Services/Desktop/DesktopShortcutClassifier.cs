@@ -22,7 +22,7 @@ public static class DesktopShortcutClassifier
         "galaxyclient.exe", "battle.net.exe", "ubisoftconnect.exe", "upc.exe",
         "eadesktop.exe", "ealauncher.exe", "origin.exe", "riotclientservices.exe", "rockstargameslauncher.exe",
         "vrmonitor.exe", "steamvr.exe", "hlvr.exe", "bsmanager.exe", "oculusclient.exe", "metahorizonlink.exe",
-        "qloader.exe", "minecraftlauncher.exe", "minecraft.exe", "robloxplayerbeta.exe", "robloxplayerlauncher.exe", "playnite.desktopapp.exe", "playnite.fullscreenapp.exe", "itch.exe"
+        "qloader.exe", "minecraftlauncher.exe", "minecraft.exe", "robloxplayerbeta.exe", "robloxplayerlauncher.exe", "playnite.desktopapp.exe", "playnite.fullscreenapp.exe", "itch.exe", "tlauncher.exe", "nfshp.exe", "nfs11.exe"
     };
 
     private static readonly HashSet<string> EditorExecutables = new(StringComparer.OrdinalIgnoreCase)
@@ -31,7 +31,7 @@ public static class DesktopShortcutClassifier
         "lightroomclassic.exe", "krita.exe", "gimp.exe", "inkscape.exe", "paintdotnet.exe", "mspaint.exe",
         "photo.exe", "designer.exe", "affinity.exe", "coreldrw.exe", "corelpp.exe",
         "psp.exe", "paintshoppro.exe", "captureone.exe", "darktable.exe", "rawtherapee.exe",
-        "epplus.exe", "epsonphotoplus.exe", "epson photo+.exe", "photolab.exe", "aseprite.exe", "clipstudiopaint.exe", "figma.exe", "luminarneo.exe"
+        "epplus.exe", "epsonphotoplus.exe", "epson photo+.exe", "photolab.exe", "aseprite.exe", "clipstudiopaint.exe", "figma.exe", "luminarneo.exe", "xnview.exe", "xnviewmp.exe"
     };
 
     private static readonly string[] GameSchemes = [
