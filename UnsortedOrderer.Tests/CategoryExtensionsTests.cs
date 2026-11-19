@@ -1,118 +1,55 @@
-using System.Collections.Generic;
-using UnsortedOrderer.Application.Contracts.Services.Categories;
-using UnsortedOrderer.Application.Contracts.Services.Categories.Photo;
-using UnsortedOrderer.Application.Services.Categories;
-using UnsortedOrderer.Application.Services.Categories.Video;
+using Microsoft.Extensions.DependencyInjection;
+using UnsortedOrderer.Application.DependencyInjection;
 using UnsortedOrderer.Categories;
 using UnsortedOrderer.Contracts.Categories;
 using UnsortedOrderer.Models;
-using UnsortedOrderer.Services;
 using Xunit;
 
 namespace UnsortedOrderer.Tests;
 
-public class CategoryExtensionsTests
+public sealed class CategoryExtensionsTests
 {
     [Fact]
-    public void Categories_should_not_have_overlapping_extensions_except_images()
+    public void Registered_categories_have_only_explicit_extension_overlaps()
     {
-        var categories = CreateCategories();
+        var settings = new AppSettings("source", "sorted", "Soft", "Archives", "Images", "Photos",
+            "Music", "Guitar Tabs", "EBooks", "Repositories", "Drivers", "Firmware", "Metadata",
+            "Web", "Graphics", "_Unknown", [], [], [], []);
+        using var provider = new ServiceCollection().AddUnsortedOrdererApplication(settings).BuildServiceProvider();
+        var categories = provider.GetRequiredService<IEnumerable<ICategory>>().ToArray();
 
-        var overlaps = FindExtensionOverlaps(categories)
-            .Where(kvp => !kvp.Value.All(category => category is ImageCategoryBase))
-            .ToArray();
+        CategoryExtensionPolicy.Validate(categories);
 
-        var overlapDetails = overlaps
-            .Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value.Select(c => c.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}")
-            .ToArray();
-
-        Assert.True(
-            overlaps.Length == 0,
-            $"Category extensions overlap: {string.Join("; ", overlapDetails)}");
+        Assert.IsType<ConfigurationsCategory>(Assert.Single(categories.Where(c => c.Matches(".conf"))));
+        var gpx = categories.Where(c => c.Matches(".gpx")).ToArray();
+        Assert.Equal(2, gpx.Length);
+        Assert.Contains(gpx, c => c is GpsTracksCategory);
+        Assert.Contains(gpx, c => c is MusicalInstrumentsCategory);
     }
 
-    private static IReadOnlyCollection<ICategory> CreateCategories()
+    [Fact]
+    public void Accidental_overlap_is_rejected_ignoring_case_and_leading_dot()
     {
-        return new ICategory[]
-        {
-            new PhotosCategory("Photos"),
-            new ImagesCategory("Images"),
-            new MusicCategory("Music", new MusicService()),
-            new MusicalInstrumentsCategory("MusicalInstruments"),
-            new EBooksCategory("EBooks"),
-            new DocumentsCategory(),
-            new DataCategory(),
-            new FontsCategory(),
-            new DiagramsCategory(),
-            new DatabasesCategory(),
-            new MapsCategory(),
-            new ProjectPlansCategory(),
-            new GpsTracksCategory(),
-            new WebCategory("Web"),
-            new GraphicsCategory("Graphics"),
-            new VideosCategory(
-                CreateVideoCameraFileNamePatternServices(),
-                new StubVideoDateService(),
-                new StubMessengerPathService()),
-            new ThreeDPrintingCategory(),
-            new ArchivesCategory("Archives"),
-            new CertificatesCategory(),
-            new FirmwareCategory("Firmware"),
-            new MetadataCategory("Metadata"),
-            new DriversCategory("Drivers"),
-            new RepositoriesCategory(
-                "Repositories",
-                new RepositoriesService(RepositoriesCategory.CodeExtensions, 3)),
-            new SoftCategory("Soft", new SoftwareDistributivesService()),
-            new UnknownCategory("Unknown"),
-        };
+        ICategory[] categories = [new TestCategory("One", "CONF"), new TestCategory("Two", ".conf")];
+
+        var error = Assert.Throws<InvalidOperationException>(() => CategoryExtensionPolicy.Validate(categories));
+
+        Assert.Contains(".conf", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("One, Two", error.Message);
     }
 
-    private static IEnumerable<ICameraFileNamePatternService> CreateVideoCameraFileNamePatternServices()
+    [Theory]
+    [InlineData(".gpx")]
+    [InlineData(".jpg")]
+    public void Exception_does_not_allow_a_third_category(string extension)
     {
-        return new ICameraFileNamePatternService[]
-        {
-            new VideoCameraFileNamePatternService(Array.Empty<DeviceBrandPattern>())
-        };
+        ICategory[] categories = [new GpsTracksCategory(), new MusicalInstrumentsCategory("Guitar Tabs"),
+            new ImagesCategory("Images"), new PhotosCategory("Photos"), new TestCategory("Third", extension)];
+        var error = Assert.Throws<InvalidOperationException>(() => CategoryExtensionPolicy.Validate(categories));
+
+        Assert.Contains(extension, error.Message);
+        Assert.Contains("Third", error.Message);
     }
 
-    private sealed class StubVideoDateService : IVideoDateService
-    {
-        public DateTime GetVideoDate(string filePath)
-        {
-            return DateTime.UtcNow;
-        }
-    }
-
-    private sealed class StubMessengerPathService : IMessengerPathService
-    {
-        public string? GetMessengerFolder(string filePath) => null;
-    }
-
-    private static IReadOnlyDictionary<string, IReadOnlyCollection<ICategory>> FindExtensionOverlaps(
-        IEnumerable<ICategory> categories)
-    {
-        var lookup = new Dictionary<string, HashSet<ICategory>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var category in categories)
-        {
-            foreach (var extension in category.Extensions)
-            {
-                if (!lookup.TryGetValue(extension, out var categorySet))
-                {
-                    categorySet = new HashSet<ICategory>();
-                    lookup[extension] = categorySet;
-                }
-
-                categorySet.Add(category);
-            }
-        }
-
-        return lookup
-            .Where(kvp => kvp.Value.Count > 1)
-            .ToDictionary(
-                kvp => kvp.Key,
-                kvp => (IReadOnlyCollection<ICategory>)kvp.Value.ToArray(),
-                StringComparer.OrdinalIgnoreCase);
-    }
+    private sealed class TestCategory(string name, string extension) : FileCategory(name, name, [extension]);
 }

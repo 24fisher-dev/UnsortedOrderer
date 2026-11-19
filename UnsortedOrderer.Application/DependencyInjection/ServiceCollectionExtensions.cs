@@ -81,6 +81,7 @@ public static class ServiceCollectionExtensions
                 new DownloadFragmentsCategory(),
                 new RomImagesCategory(),
                 new DataCategory(),
+                new ConfigurationsCategory(),
                 new FontsCategory(),
                 new DiagramsCategory(),
                 new DatabasesCategory(),

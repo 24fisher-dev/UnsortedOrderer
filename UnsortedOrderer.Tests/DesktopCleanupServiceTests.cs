@@ -186,6 +186,96 @@ public class DesktopCleanupServiceTests
         public void CreateFolderLink(string path, string targetDirectory) { }
     }
 
+    [Fact]
+    public void Desktop_cleanup_quarantines_empty_url_shortcut_but_preserves_script_and_valid_url()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var desktop = Directory.CreateDirectory(Path.Combine(root, "Desktop")).FullName;
+        var unsorted = Path.Combine(root, "Unsorted");
+        var sorted = Path.Combine(root, "Sorted");
+        try
+        {
+            var script = Path.Combine(desktop, "deploy.BAT");
+            var broken = Path.Combine(desktop, "Empty.url");
+            var valid = Path.Combine(desktop, "Web.url");
+            File.WriteAllText(script, "@echo off");
+            File.WriteAllText(broken, "[InternetShortcut]\nURL=");
+            File.WriteAllText(valid, "[InternetShortcut]\nURL=https://example.com");
+            var log = new RecordingLog();
+            var cleaner = new DesktopCleanupService(log, desktop, new ApplicationLocation(root, null));
+
+            Assert.Equal(0, cleaner.Clean(unsorted, sorted));
+
+            Assert.True(File.Exists(script));
+            Assert.True(File.Exists(valid));
+            Assert.False(File.Exists(broken));
+            Assert.Equal("[InternetShortcut]\nURL=", File.ReadAllText(Path.Combine(sorted, "_ToDelete", "Empty.url")));
+            Assert.Contains(log.Lines, line => line.Contains("Битых ярлыков в корзине — 1"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Windows_missing_local_shortcut_is_quarantined_and_valid_links_survive()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var desktop = Directory.CreateDirectory(Path.Combine(root, "Desktop")).FullName;
+        var existing = Directory.CreateDirectory(Path.Combine(root, "Exists")).FullName;
+        var missing = Directory.CreateDirectory(Path.Combine(root, "Removed")).FullName;
+        var sorted = Path.Combine(root, "Sorted");
+        try
+        {
+            var store = new UnsortedOrderer.Services.Desktop.DesktopShortcutStore();
+            var broken = Path.Combine(desktop, "Missing.lnk");
+            var valid = Path.Combine(desktop, "Valid.lnk");
+            store.CreateFolderLink(broken, missing);
+            store.CreateFolderLink(valid, existing);
+            Directory.Delete(missing);
+            var cleaner = new DesktopCleanupService(new RecordingLog(), desktop, new ApplicationLocation(root, null), store);
+
+            Assert.Equal(0, cleaner.Clean(Path.Combine(root, "Unsorted"), sorted));
+
+            Assert.True(File.Exists(valid));
+            Assert.False(File.Exists(broken));
+            Assert.True(File.Exists(Path.Combine(sorted, "_ToDelete", "Missing.lnk")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Windows_shortcut_probe_preserves_virtual_targets_and_network_paths()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var folder = Directory.CreateTempSubdirectory();
+        try
+        {
+            var link = Path.Combine(folder.FullName, "Link.lnk");
+            var headerAndTerminal = new byte[0x50];
+            headerAndTerminal[0] = 0x4c;
+            new Guid("00021401-0000-0000-c000-000000000046").TryWriteBytes(headerAndTerminal.AsSpan(4, 16));
+            File.WriteAllBytes(link, headerAndTerminal);
+            var store = new UnsortedOrderer.Services.Desktop.DesktopShortcutStore();
+
+            Assert.True(store.IsBroken(link, new("")));
+            Assert.False(store.IsBroken(link, new(@"\\unavailable-server\share\Tool.exe")));
+            // HasLinkTargetIDList can represent a valid shell item without a filesystem path.
+            headerAndTerminal[20] = 1;
+            File.WriteAllBytes(link, headerAndTerminal);
+            Assert.False(store.IsBroken(link, new("")));
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
     private sealed class RecordingLog : IMessageWriter
     {
         public List<string> Lines { get; } = [];

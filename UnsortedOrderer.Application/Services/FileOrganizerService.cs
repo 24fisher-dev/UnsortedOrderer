@@ -72,7 +72,7 @@ public sealed class FileOrganizerService
         _unknownCategory = _categories.OfType<UnknownCategory>().FirstOrDefault()
             ?? throw new InvalidOperationException("Unknown category is missing.");
 
-        ValidateCategoryExtensions();
+        CategoryExtensionPolicy.Validate(_categories);
     }
 
     internal void ClearQuarantine() => _quarantine.Clear(_application, _settings.SourceDirectory);
@@ -367,48 +367,6 @@ public sealed class FileOrganizerService
         var unknownDirectory = Path.Combine(_settings.DestinationRoot, _unknownCategory.FolderName, extensionFolderName);
         var destination = FileUtilities.MoveFile(filePath, unknownDirectory);
         _statisticsService.RecordMovedFile(destination, _unknownCategory.FolderName);
-    }
-
-    private void ValidateCategoryExtensions()
-    {
-        var extensionToCategories = new Dictionary<string, List<ICategory>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var category in _categories)
-        {
-            foreach (var extension in category.Extensions)
-            {
-                if (!extensionToCategories.TryGetValue(extension, out var categories))
-                {
-                    categories = new List<ICategory>();
-                    extensionToCategories[extension] = categories;
-                }
-
-                categories.Add(category);
-            }
-        }
-
-        var overlaps = extensionToCategories
-            .Where(kvp => kvp.Value.Count > 1)
-            .Where(kvp => !kvp.Value.All(category => category is ImageCategoryBase))
-            .ToArray();
-
-        if (overlaps.Length == 0)
-        {
-            return;
-        }
-
-        var overlapDetails = overlaps
-            .Select(kvp =>
-            {
-                var names = kvp.Value
-                    .Select(c => c.Name)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(v => v, StringComparer.OrdinalIgnoreCase);
-
-                return $"{kvp.Key}: {string.Join(", ", names)}";
-            });
-
-        throw new InvalidOperationException($"Category extensions overlap: {string.Join("; ", overlapDetails)}");
     }
 
     private void PrintStatistics()

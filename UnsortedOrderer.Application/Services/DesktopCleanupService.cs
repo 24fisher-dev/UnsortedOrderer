@@ -84,6 +84,7 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
             foreach (var entry in entries)
             {
                 if (IsShortcut(entry) || entry.Name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)
+                    || entry is FileInfo && entry.Extension.Equals(".bat", StringComparison.OrdinalIgnoreCase)
                     || _application.ProtectsFile(entry.FullName) ||
                     (entry is DirectoryInfo && (_application.ProtectsDirectory(entry.FullName)
                         || DesktopShortcutOrganizer.IsGroupFolder(entry.Name)
@@ -114,10 +115,10 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         var shortcuts = _shortcuts.Group(desktopPath, unsortedPath, sortedPath, entries.Where(IsShortcut).Select(entry => entry.FullName));
         failed += shortcuts.Errors;
 
-        if (moved == 0 && shortcuts.Moved == 0)
+        if (moved == 0 && shortcuts.Moved == 0 && shortcuts.Quarantined == 0)
             _messageWriter.WriteLine($"{label}: ничего не перемещено.");
         _messageWriter.WriteLine($"{label}: объектов в папку разбора — {moved}. Ярлыков сгруппировано — {shortcuts.Moved}. " +
-            $"Ярлыков оставлено — {shortcuts.Left}. Ошибок переноса: {failed}.");
+            $"Битых ярлыков в корзине — {shortcuts.Quarantined}. Ярлыков оставлено — {shortcuts.Left}. Ошибок переноса: {failed}.");
         _messageWriter.WriteLine(string.Empty);
         return failed;
     }

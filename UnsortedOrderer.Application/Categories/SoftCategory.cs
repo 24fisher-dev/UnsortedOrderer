@@ -7,7 +7,6 @@ namespace UnsortedOrderer.Categories;
 public sealed class SoftCategory : FileCategory, INonSplittableDirectoryCategory
 {
     private const string DiskImagesFolderName = "_Образы дисков";
-    private const string ConfigurationFilesFolderName = "_Configuration_files";
     private const string XmlFilesFolderName = "_Xml_files";
 
     private readonly SoftwareDistributivesService _distributionDetector;
@@ -38,7 +37,6 @@ public sealed class SoftCategory : FileCategory, INonSplittableDirectoryCategory
             ".rpm",
             ".appimage"
         }
-        .Append(".conf")
         .Append(".xml")
         .Concat(DiskImageExtensions)
         .ToArray();
@@ -67,14 +65,6 @@ public sealed class SoftCategory : FileCategory, INonSplittableDirectoryCategory
     {
         var categoryRoot = Path.Combine(destinationRoot, FolderName);
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
-        if (extension == ".conf")
-        {
-            var configurationFolder = Path.Combine(categoryRoot, ConfigurationFilesFolderName);
-            Directory.CreateDirectory(configurationFolder);
-
-            return configurationFolder;
-        }
-
         if (extension == ".xml")
         {
             var xmlFolder = Path.Combine(categoryRoot, XmlFilesFolderName);
