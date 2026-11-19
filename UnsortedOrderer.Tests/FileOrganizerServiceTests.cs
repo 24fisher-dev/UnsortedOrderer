@@ -354,10 +354,6 @@ public partial class FileOrganizerServiceTests
         {
         }
 
-        public void RecordDeletedFile(string extension)
-        {
-        }
-
         public void PrintStatistics(string sourceDirectory)
         {
         }

@@ -6,7 +6,11 @@ namespace UnsortedOrderer.Categories;
 public sealed class ThreeDPrintingCategory : FileCategory
 {
     public ThreeDPrintingCategory()
-        : base("3DPrinting", "3DPrinting", [".stl", ".3mf", ".gcode", ".bgcode", ".photon", ".pwmo"])
+        : base("3DPrinting", "3DPrinting", [
+            ".stl", ".3mf", ".gcode", ".bgcode", ".photon", ".pwmo", ".curaprofile",
+            ".obj", ".f3d", ".skp", ".dxf", ".dwg", ".3dm", ".sldprt", ".sldasm", ".ipt", ".iam", ".fcstd",
+            ".fbx", ".3ds", ".dae", ".ply", ".blend", ".gltf", ".glb", ".usdz", ".step", ".stp", ".iges", ".igs", ".scad"
+        ])
     {
     }
 

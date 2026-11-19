@@ -6,6 +6,15 @@ public static class DesktopShortcutClassifier
 {
     public const string GamesFolder = "Games";
     public const string EditorsFolder = "PhotoEditors";
+    public const string UtilitiesFolder = "Utilities";
+
+    private static readonly HashSet<string> UtilityExecutables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "aida64.exe", "msiafterburner.exe", "rtss.exe", "cpuz.exe", "cpuz_x64.exe",
+        "gpuz.exe", "gpu-z.exe", "hwinfo.exe", "hwinfo64.exe", "hwmonitor.exe", "hwmonitor_x64.exe",
+        "diskinfo.exe", "diskinfo64.exe", "diskmark.exe", "diskmark64.exe", "rufus.exe",
+        "autoruns.exe", "autoruns64.exe", "procexp.exe", "procexp64.exe", "procmon.exe", "procmon64.exe"
+    };
 
     private static readonly HashSet<string> GameExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -57,6 +66,9 @@ public static class DesktopShortcutClassifier
         {
             return EditorsFolder;
         }
+
+        if (isExecutable && UtilityExecutables.Contains(executable))
+            return UtilitiesFolder;
 
         var workingDirectory = shortcut.WorkingDirectory.Replace('\\', '/').TrimEnd('/') + "/";
         return isExecutable &&

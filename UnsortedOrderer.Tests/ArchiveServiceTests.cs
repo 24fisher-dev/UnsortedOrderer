@@ -13,7 +13,7 @@ namespace UnsortedOrderer.Tests;
 public sealed class ArchiveServiceTests
 {
     [Fact]
-    public void HandleArchive_ReplacesExistingFileAtDestination()
+    public void HandleArchive_PreservesPreviousArchiveInQuarantine()
     {
         using var source = new TempDirectory();
         using var destinationRoot = new TempDirectory();
@@ -27,6 +27,9 @@ public sealed class ArchiveServiceTests
         File.WriteAllText(existingArchivePath, "old-archive");
         File.WriteAllText(archivePath, "new-archive");
 
+        var distribution = Path.Combine(destinationRoot.Path, "Soft", "demo");
+        Directory.CreateDirectory(distribution);
+        File.WriteAllText(Path.Combine(distribution, "payload.exe"), "old payload");
         var settings = new AppSettings(
             source.Path,
             destinationRoot.Path,
@@ -52,12 +55,16 @@ public sealed class ArchiveServiceTests
         var statistics = new NullStatisticsService();
         var service = new ArchiveService(settings, Array.Empty<ICategory>(), statistics);
 
-        var movedArchivePath = service.HandleArchive(archivePath, destinationDirectory);
+        var movedArchivePath = service.HandleArchiveFile(archivePath, "Archives").DestinationPath;
 
         Assert.Equal(existingArchivePath, movedArchivePath);
         Assert.False(File.Exists(archivePath));
         Assert.True(File.Exists(existingArchivePath));
         Assert.Equal("new-archive", File.ReadAllText(existingArchivePath));
+        var quarantine = Path.Combine(destinationRoot.Path, "_ToDelete");
+        Assert.Equal("old-archive", File.ReadAllText(Path.Combine(quarantine, archiveName)));
+        Assert.Equal("old payload", File.ReadAllText(Path.Combine(quarantine, "demo", "payload.exe")));
+        Assert.False(Directory.Exists(distribution));
     }
 
     private sealed class NullStatisticsService : IStatisticsService
@@ -79,10 +86,6 @@ public sealed class ArchiveServiceTests
         }
 
         public void RecordUnknownFile(string extension)
-        {
-        }
-
-        public void RecordDeletedFile(string extension)
         {
         }
 

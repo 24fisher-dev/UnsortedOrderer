@@ -54,7 +54,6 @@ public class CategoryExtensionsTests
                 CreateVideoCameraFileNamePatternServices(),
                 new StubVideoDateService(),
                 new StubMessengerPathService()),
-            new ThreeDModelsCategory(),
             new ThreeDPrintingCategory(),
             new ArchivesCategory("Archives"),
             new CertificatesCategory(),

@@ -26,6 +26,10 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
     [InlineData(@"C:\Tools\Inkscape\inkscape.exe", "", "", "PhotoEditors")]
     [InlineData(@"C:\Tools\GIMP\gimp-3.0.exe", "", "", "PhotoEditors")]
     [InlineData(@"C:\Program Files\Affinity\Affinity Photo 2\Photo.exe", "", "", "PhotoEditors")]
+    [InlineData(@"C:\Tools\AIDA64\aida64.exe", "", "", "Utilities")]
+    [InlineData(@"C:\Program Files\MSI Afterburner\MSIAfterburner.exe", "", "", "Utilities")]
+    [InlineData(@"C:\Tools\CPU-Z\cpuz_x64.exe", "", "", "Utilities")]
+    [InlineData("https://example.com/cpuz.exe", "", "", null)]
     [InlineData(@"C:\Apps\designer.exe", "", "", null)]
     [InlineData(@"C:\Users\me\Pictures\Photoshop.psd", "", "", null)]
     [InlineData(@"C:\Program Files\Browser\browser.exe", "steam://rungameid/730", "", null)]
@@ -49,6 +53,7 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
         File.WriteAllText(exe, "running");
         File.WriteAllText(Path.Combine(desktop, "plain.txt"), "move me");
         File.WriteAllText(Path.Combine(desktop, "Steam.url"), "[InternetShortcut]\nURL=steam://rungameid/123");
+        File.WriteAllText(Path.Combine(desktop, "AIDA64.lnk"), @"C:\Apps\aida64.exe");
         File.WriteAllText(Path.Combine(desktop, "Krita.lnk"), @"C:\Apps\krita.exe");
         File.WriteAllText(Path.Combine(desktop, "Random.lnk"), @"C:\Apps\misc.exe");
         File.WriteAllText(Path.Combine(desktop, "Alias for output.lnk"), sorted);
@@ -69,6 +74,7 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
         Assert.Equal("old shortcut", File.ReadAllText(Path.Combine(games, "Steam.url")));
         Assert.Equal(2, Directory.GetFiles(games, "*.url").Length);
         Assert.True(File.Exists(Path.Combine(desktop, "PhotoEditors", "Krita.lnk")));
+        Assert.True(File.Exists(Path.Combine(desktop, "Utilities", "AIDA64.lnk")));
         Assert.True(File.Exists(Path.Combine(desktop, "Random.lnk")));
         Assert.True(File.Exists(Path.Combine(source, "plain.txt")));
         Assert.True(File.Exists(Path.Combine(sorted, "already sorted.txt")));
