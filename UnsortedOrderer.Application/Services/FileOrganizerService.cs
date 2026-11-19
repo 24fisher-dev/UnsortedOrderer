@@ -126,16 +126,35 @@ public sealed class FileOrganizerService
 
         if (nonSplittableCategory is not null)
         {
-            MoveNonSplittableDirectory(subDirectory, nonSplittableCategory);
+            var moved = MoveNonSplittableDirectory(subDirectory, nonSplittableCategory);
+            if (!ApplicationLocation.SamePath(subDirectory, moved))
+                RemoveVacatedWrappers(subDirectory, moved);
             return;
         }
 
         ProcessDirectory(subDirectory);
-        if (IsDirectoryEmpty(subDirectory))
+        RemoveDirectoryIfEmpty(subDirectory);
+    }
+
+    private void RemoveVacatedWrappers(string outer, string movedRepository)
+    {
+        for (var wrapper = Path.GetDirectoryName(movedRepository);
+             wrapper is not null && ApplicationLocation.ContainsPath(outer, wrapper);
+             wrapper = Path.GetDirectoryName(wrapper))
         {
-            Directory.Delete(subDirectory);
-            _statisticsService.RecordDeletedDirectory(subDirectory);
+            if (ShouldSkipDirectory(wrapper) || !RemoveDirectoryIfEmpty(wrapper))
+                break;
         }
+    }
+
+    private bool RemoveDirectoryIfEmpty(string directory)
+    {
+        if (!IsDirectoryEmpty(directory))
+            return false;
+
+        Directory.Delete(directory);
+        _statisticsService.RecordDeletedDirectory(directory);
+        return true;
     }
 
     private void TryProcessEntry(string path, Action process)
@@ -313,7 +332,7 @@ public sealed class FileOrganizerService
         return result is bool matched && matched;
     }
 
-    private void MoveNonSplittableDirectory(string directory, INonSplittableDirectoryCategory category)
+    private string MoveNonSplittableDirectory(string directory, INonSplittableDirectoryCategory category)
     {
         var sourceDirectory = category is RepositoriesCategory repositoriesCategory
             ? repositoriesCategory.GetRepositoryRoot(directory) ?? directory
@@ -324,6 +343,7 @@ public sealed class FileOrganizerService
         DirectoryTransfer.Move(sourceDirectory, destinationPath);
 
         _statisticsService.RecordMovedNonSplittableDirectory(category, destinationPath, fileCount);
+        return sourceDirectory;
     }
 
     private bool ShouldSkipDirectory(string directory) =>

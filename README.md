@@ -1,6 +1,6 @@
 # UnsortedOrderer
 
-Standalone Windows Forms application for organizing a folder full of unsorted files. The published executable includes .NET and the default configuration. The default source is `C:/_Unsorted` and the destination is `C:/_Sorted`. To use custom settings, put a complete `appsettings.json` next to the executable. A full example is available in [UnsortedOrderer.WinForms/appsettings.json](UnsortedOrderer.WinForms/appsettings.json).
+Standalone Windows Forms application for organizing a folder full of unsorted files. The published executable includes .NET and the default configuration. The default source is `C:\_Unsorted` and the destination is `C:\_Sorted`. To use custom settings, put a complete `appsettings.json` next to the executable. A full example is available in [UnsortedOrderer.WinForms/appsettings.json](UnsortedOrderer.WinForms/appsettings.json).
 
 ## Configuration
 
@@ -22,7 +22,7 @@ Standalone Windows Forms application for organizing a folder full of unsorted fi
 - Large photos (including RAW) are moved to `PhotosFolderName` with a year/month breakdown determined from EXIF or file creation date. If EXIF dates are earlier than 1980, the file creation date is used instead.
 - Small images (icons, previews, logos) go to the `images` subfolder inside `ImagesFolderName` without date breakdown. Size is determined by resolution (up to 512 px on the longer side) and file size (up to ~300 KB for small images).
 - Documents, videos, 3D models, archives, digital certificates, firmware files, metadata, and software are sent to dedicated folders.
-- STL, 3MF, G-code and binary G-code go to `3DPrinting/<year>/<month>` using the file creation date (last modified date if creation is older than 1980). Recognized Bambu Studio and OrcaSlicer filament preset JSONs follow the same rule. Other JSONs, including printer and process presets, keep their existing routing. Generic 3D formats such as OBJ and STEP, and Cura profiles, also go to `3DPrinting`.
+- STL, 3MF, G-code and binary G-code go to `3DPrinting/<year>/<month>` using the file creation date (last modified date if creation is older than 1980). Recognized Bambu Studio and OrcaSlicer filament preset JSONs follow the same rule. Other JSON files go to `Data`. Generic 3D formats such as OBJ and STEP, and Cura profiles, also go to `3DPrinting`.
 - Excel (`.xls`, `.xlsx`, `.xlsm`, `.xlsb`), `.csv` and `.ods` go to `Data`. Folders containing data XML files and optionally spreadsheets or ordinary folder metadata are moved intact to `Data`. Existing software/driver package rules and routing of loose XML are unchanged.
 - Guitar Pro 6 `.gpx` containers (`BCFS`/`BCFZ`) go to `Guitar Tabs`, GPS Exchange XML goes to `GPX`, and unrecognized `.gpx` stays in the unknown category.
 - Fusion and SketchUp (`.f3d`, `.skp`) go to `3DPrinting`, `.svg` and `.tgs` go to the graphics category, and `.thm` and `.winmd` go to metadata. `.scr` goes to software only when it has a Windows PE header. Generic `.data`, `.prn`, and files without extensions are not guessed.
