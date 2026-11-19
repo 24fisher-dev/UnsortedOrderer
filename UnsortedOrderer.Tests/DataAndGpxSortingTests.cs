@@ -92,7 +92,11 @@ public sealed class DataAndGpxSortingTests : IDisposable
         File.WriteAllText(Path.Combine(gps, "ride.gpx"), "existing");
         File.WriteAllText(Path.Combine(old, "ride.gpx"), "legacy");
         File.WriteAllText(Path.Combine(maps, "Дмитров_Городское_поселение_Деденево_1.kml"), KmlTrack);
+        File.WriteAllText(Path.Combine(maps, "Дмитров_Городское_поселение_Деденево_1.zip"), "companion");
         File.WriteAllText(Path.Combine(maps, "boundary.kml"), KmlMap);
+        File.WriteAllText(Path.Combine(maps, "mixed.kml"), KmlTrack);
+        File.WriteAllText(Path.Combine(maps, "mixed.geojson"), "{}");
+        File.WriteAllText(Path.Combine(maps, "mixed.zip"), "ambiguous");
 
         Sort();
         Sort();
@@ -100,8 +104,10 @@ public sealed class DataAndGpxSortingTests : IDisposable
         Assert.Equal("existing", File.ReadAllText(Path.Combine(gps, "ride.gpx")));
         Assert.Equal("legacy", File.ReadAllText(Path.Combine(gps, "ride(1).gpx")));
         Assert.Equal(KmlTrack, File.ReadAllText(Path.Combine(gps, "Дмитров_Городское_поселение_Деденево_1.kml")));
+        Assert.Equal("companion", File.ReadAllText(Path.Combine(gps, "Дмитров_Городское_поселение_Деденево_1.zip")));
         Assert.False(File.Exists(Path.Combine(maps, "Дмитров_Городское_поселение_Деденево_1.kml")));
         Assert.Equal(KmlMap, File.ReadAllText(Path.Combine(maps, "boundary.kml")));
+        Assert.Equal("ambiguous", File.ReadAllText(Path.Combine(maps, "mixed.zip")));
     }
 
     [Theory]
