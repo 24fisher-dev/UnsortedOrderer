@@ -1,4 +1,5 @@
 using System.Text;
+using System.IO.Compression;
 using System.Reflection;
 using UnsortedOrderer.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,9 +20,9 @@ public sealed class DataAndGpxSortingTests : IDisposable
     [Theory]
     [InlineData("BCFSexample", "Guitar Tabs")]
     [InlineData("BCFZexample", "Guitar Tabs")]
-    [InlineData("<gpx xmlns='http://www.topografix.com/GPX/1/1'><trk/></gpx>", "GPX")]
-    [InlineData("<gps:gpx xmlns:gps='http://www.topografix.com/GPX/1/0'><gps:rte/></gps:gpx>", "GPX")]
-    [InlineData("<gpx><metadata/><trk><trkseg/></trk></gpx>", "GPX")]
+    [InlineData("<gpx xmlns='http://www.topografix.com/GPX/1/1'><trk/></gpx>", "GPS Tracks")]
+    [InlineData("<gps:gpx xmlns:gps='http://www.topografix.com/GPX/1/0'><gps:rte/></gps:gpx>", "GPS Tracks")]
+    [InlineData("<gpx><metadata/><trk><trkseg/></trk></gpx>", "GPS Tracks")]
     [InlineData("<gpx xmlns='urn:other'><trk/></gpx>", "Unknown/gpx")]
     [InlineData("<gpx><notATrack/></gpx>", "Unknown/gpx")]
     [InlineData("<!DOCTYPE gpx SYSTEM 'https://example.invalid/entity'><gpx><trk/></gpx>", "Unknown/gpx")]
@@ -33,6 +34,93 @@ public sealed class DataAndGpxSortingTests : IDisposable
         Sort();
         Assert.False(File.Exists(original));
         Assert.Equal(content, File.ReadAllText(Path.Combine(Destination, expectedFolder, "ride.GPX")));
+    }
+
+    private const string KmlTrack = """
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document><Placemark><LineString><coordinates>37.5,56.2 37.6,56.3</coordinates></LineString></Placemark>
+          <Placemark><Point><coordinates>37.5,56.2</coordinates></Point></Placemark></Document>
+        </kml>
+        """;
+    private const string KmlMap = """
+        <kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><Polygon><outerBoundaryIs>
+        <LinearRing><coordinates>37,56 38,56 38,57 37,56</coordinates></LinearRing>
+        </outerBoundaryIs></Polygon></Placemark></kml>
+        """;
+
+    [Theory]
+    [InlineData("Дмитров_Городское_поселение_Деденево_1.kml", KmlTrack, "GPS Tracks")]
+    [InlineData("boundary.kml", KmlMap, "Maps")]
+    [InlineData("point.kml", "<kml><Placemark><Point/></Placemark></kml>", "Maps")]
+    [InlineData("gx.kml", "<kml xmlns:gx='http://www.google.com/kml/ext/2.2'><Placemark><gx:MultiTrack><gx:Track><gx:coord>37 56 0</gx:coord></gx:Track></gx:MultiTrack></Placemark></kml>", "GPS Tracks")]
+    [InlineData("corrupt.kml", "<kml><LineString>broken", "Maps")]
+    [InlineData("untrusted.kml", "<!DOCTYPE kml SYSTEM 'https://example.invalid/dtd'><kml/>", "Maps")]
+    [InlineData("ride.tcx", "<TrainingCenterDatabase xmlns='http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2'><Track><Trackpoint><Position><LatitudeDegrees>56</LatitudeDegrees><LongitudeDegrees>37</LongitudeDegrees></Position></Trackpoint></Track></TrainingCenterDatabase>", "GPS Tracks")]
+    [InlineData("indoor.tcx", "<TrainingCenterDatabase xmlns='http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2'><Track><Trackpoint><HeartRateBpm/></Trackpoint></Track></TrainingCenterDatabase>", "Maps")]
+    public void Track_containers_are_routed_by_content(string name, string content, string expected)
+    {
+        Put(name, content);
+        Sort();
+        Assert.Equal(content, File.ReadAllText(Path.Combine(Destination, expected, name)));
+    }
+
+    [Theory]
+    [InlineData(KmlTrack, "GPS Tracks")]
+    [InlineData(KmlMap, "Maps")]
+    public void Kmz_uses_its_primary_kml_without_extracting_files(string content, string expected)
+    {
+        Directory.CreateDirectory(Source);
+        var file = Path.Combine(Source, "bundle.kmz");
+        using (var archive = ZipFile.Open(file, ZipArchiveMode.Create))
+        {
+            using (var document = new StreamWriter(archive.CreateEntry("doc.kml").Open()))
+                document.Write(content);
+            using (var extra = new StreamWriter(archive.CreateEntry("assets/other.kml").Open()))
+                extra.Write(KmlTrack);
+        }
+        Sort();
+        Assert.True(File.Exists(Path.Combine(Destination, expected, "bundle.kmz")));
+        Assert.False(Directory.Exists(Path.Combine(Destination, expected, "assets")));
+    }
+
+    [Fact]
+    public void Legacy_gpx_and_sorted_map_tracks_are_migrated_without_replacing_existing_files()
+    {
+        var gps = Directory.CreateDirectory(Path.Combine(Destination, "GPS Tracks")).FullName;
+        var old = Directory.CreateDirectory(Path.Combine(Destination, "GPX")).FullName;
+        var maps = Directory.CreateDirectory(Path.Combine(Destination, "Maps")).FullName;
+        File.WriteAllText(Path.Combine(gps, "ride.gpx"), "existing");
+        File.WriteAllText(Path.Combine(old, "ride.gpx"), "legacy");
+        File.WriteAllText(Path.Combine(maps, "Дмитров_Городское_поселение_Деденево_1.kml"), KmlTrack);
+        File.WriteAllText(Path.Combine(maps, "boundary.kml"), KmlMap);
+
+        Sort();
+        Sort();
+        Assert.False(Directory.Exists(old));
+        Assert.Equal("existing", File.ReadAllText(Path.Combine(gps, "ride.gpx")));
+        Assert.Equal("legacy", File.ReadAllText(Path.Combine(gps, "ride(1).gpx")));
+        Assert.Equal(KmlTrack, File.ReadAllText(Path.Combine(gps, "Дмитров_Городское_поселение_Деденево_1.kml")));
+        Assert.False(File.Exists(Path.Combine(maps, "Дмитров_Городское_поселение_Деденево_1.kml")));
+        Assert.Equal(KmlMap, File.ReadAllText(Path.Combine(maps, "boundary.kml")));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void An_archive_stays_with_the_kml_track_in_either_processing_order(bool archiveFirst)
+    {
+        var archive = Put("path.zip", "map resources");
+        var kml = Put("path.kml", KmlTrack);
+        using var provider = BuildProvider();
+        var sorter = provider.GetRequiredService<FileOrganizerService>();
+        var processFile = typeof(FileOrganizerService).GetMethod("ProcessFile", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        processFile.Invoke(sorter, [archiveFirst ? archive : kml]);
+        processFile.Invoke(sorter, [archiveFirst ? kml : archive]);
+
+        var tracks = Path.Combine(Destination, "GPS Tracks");
+        Assert.Equal(KmlTrack, File.ReadAllText(Path.Combine(tracks, "path.kml")));
+        Assert.Equal("map resources", File.ReadAllText(Path.Combine(tracks, "path.zip")));
     }
 
     [Fact]
@@ -126,10 +214,10 @@ public sealed class DataAndGpxSortingTests : IDisposable
     }
 
     [Theory]
-    [InlineData("BCFSscore", "Guitar Tabs", "GPX", true)]
-    [InlineData("BCFSscore", "Guitar Tabs", "GPX", false)]
-    [InlineData("<gpx><trk/></gpx>", "GPX", "Guitar Tabs", true)]
-    [InlineData("<gpx><trk/></gpx>", "GPX", "Guitar Tabs", false)]
+    [InlineData("BCFSscore", "Guitar Tabs", "GPS Tracks", true)]
+    [InlineData("BCFSscore", "Guitar Tabs", "GPS Tracks", false)]
+    [InlineData("<gpx><trk/></gpx>", "GPS Tracks", "Guitar Tabs", true)]
+    [InlineData("<gpx><trk/></gpx>", "GPS Tracks", "Guitar Tabs", false)]
     public void Archive_follows_current_gpx_not_older_same_name_in_both_orders(string content, string folder, string oldFolder, bool archiveFirst)
     {
         var archive = Put("route.zip", "new archive");

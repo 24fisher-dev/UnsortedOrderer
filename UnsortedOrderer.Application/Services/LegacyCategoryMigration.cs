@@ -24,6 +24,14 @@ internal sealed class LegacyCategoryMigration(
         if (settings.MusicalInstrumentsFolderName == "Guitar Tabs")
             Consolidate("Instruments", "Guitar Tabs");
 
+        if (categories.OfType<GpsTracksCategory>().FirstOrDefault() is { } tracks)
+        {
+            Consolidate("GPX", tracks.FolderName);
+            var maps = categories.OfType<MapsCategory>().FirstOrDefault();
+            if (maps is not null)
+                RepairMapTracks(maps.FolderName, tracks.FolderName);
+        }
+
         var drivers = categories.OfType<DriversCategory>().FirstOrDefault();
         var soft = categories.OfType<SoftCategory>().FirstOrDefault();
         if (drivers is not null && soft is not null)
@@ -67,6 +75,31 @@ internal sealed class LegacyCategoryMigration(
 
             if (!Directory.EnumerateFileSystemEntries(source).Any())
                 Directory.Delete(source);
+        });
+    }
+
+    private void RepairMapTracks(string mapsFolderName, string tracksFolderName)
+    {
+        var source = Path.Combine(settings.DestinationRoot, mapsFolderName);
+        var target = Path.Combine(settings.DestinationRoot, tracksFolderName);
+        if (!IsPlainDirectory(source))
+            return;
+
+        TryMove(source, () =>
+        {
+            foreach (var file in new DirectoryInfo(source).EnumerateFiles())
+            {
+                TryMove(file.FullName, () =>
+                {
+                    if (!MapTrackProbe.IsCandidate(file.Extension) || application.ProtectsFile(file.FullName) ||
+                        (file.Attributes & FileAttributes.ReparsePoint) != 0 || !MapTrackProbe.IsTrack(file.FullName))
+                        return;
+
+                    EnsurePlainTarget(target);
+                    var destination = FileUtilities.MoveFile(file.FullName, target);
+                    log.WriteLine($"Перенесён трек из Maps: «{file.FullName}» → «{destination}».");
+                });
+            }
         });
     }
 
