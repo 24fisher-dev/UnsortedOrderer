@@ -11,20 +11,35 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
         name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.UtilitiesFolder, StringComparison.OrdinalIgnoreCase);
 
-    internal (int Moved, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links)
+    internal (int Moved, int Quarantined, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links)
     {
         var moved = 0;
+        var quarantined = 0;
         var left = 0;
         var errors = 0;
         foreach (var link in links)
         {
             var didMove = false;
+            var movedToTrash = false;
             var completed = TryShortcutOperation(link, () =>
             {
                 if ((File.GetAttributes(link) & FileAttributes.ReparsePoint) != 0)
                     return;
                 var info = store.Read(link);
-                var category = info is null ? null : DesktopShortcutClassifier.GetFolder(info);
+                if (info is null)
+                    return;
+                if (store.IsBroken(link, info))
+                {
+                    if (destination is not null)
+                    {
+                        var trash = new DeletionQuarantine(destination).MoveFile(link);
+                        movedToTrash = true;
+                        log.WriteLine($"Битый ярлык перенесён в корзину: «{link}» → «{trash}».");
+                    }
+                    return;
+                }
+
+                var category = DesktopShortcutClassifier.GetFolder(info);
                 if (category is null)
                     return;
 
@@ -42,12 +57,14 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
             });
             if (didMove)
                 moved++;
+            else if (movedToTrash)
+                quarantined++;
             else
                 left++;
             if (!completed)
                 errors++;
         }
-        return (moved, left, errors);
+        return (moved, quarantined, left, errors);
     }
 
     public void EnsureFolderLink(string desktop, string name, string target)

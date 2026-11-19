@@ -255,6 +255,19 @@ public sealed class CleanupRunTests : IDisposable
         Assert.True(File.Exists(Path.Combine(Destination, folder, name)));
     }
 
+    [Fact]
+    public void Standalone_conf_files_are_sorted_but_configuration_inside_installers_stays_with_the_package()
+    {
+        WriteInput("install.conf", "standalone");
+        WriteInput(Path.Combine("Bundle", "setup.exe"), "installer");
+        WriteInput(Path.Combine("Bundle", "settings.conf"), "part of bundle");
+
+        RunSorting();
+
+        Assert.Equal("standalone", File.ReadAllText(Path.Combine(Destination, "Configurations", "install.conf")));
+        Assert.Equal("part of bundle", File.ReadAllText(Path.Combine(Destination, "Soft", "Bundle", "settings.conf")));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -6,6 +6,7 @@ namespace UnsortedOrderer.Services.Desktop;
 public interface IDesktopShortcutStore
 {
     DesktopShortcut? Read(string path);
+    bool IsBroken(string path, DesktopShortcut shortcut) => false;
     void CreateFolderLink(string path, string targetDirectory);
 }
 
@@ -20,6 +21,14 @@ public sealed class DesktopShortcutStore : IDesktopShortcutStore
 
         return OperatingSystem.IsWindows() ? WithWindowsLink(path, link => new DesktopShortcut(
             (string)link.TargetPath, (string)link.Arguments, (string)link.WorkingDirectory)) : null;
+    }
+
+    public bool IsBroken(string path, DesktopShortcut shortcut)
+    {
+        if (Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase))
+            return string.IsNullOrWhiteSpace(shortcut.Target);
+
+        return OperatingSystem.IsWindows() && DesktopShortcutTargetProbe.IsBrokenLocalLink(path, shortcut);
     }
 
     public void CreateFolderLink(string path, string targetDirectory)
