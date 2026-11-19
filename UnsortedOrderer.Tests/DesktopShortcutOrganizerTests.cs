@@ -30,6 +30,9 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
     [InlineData(@"C:\Users\me\Pictures\Photoshop.psd", "", "", null)]
     [InlineData(@"C:\Program Files\Browser\browser.exe", "steam://rungameid/730", "", null)]
     [InlineData("https://example.com/steam", "", "", null)]
+    [InlineData("https://example.com/games/steam.exe", "", "", null)]
+    [InlineData("https://example.com/photoshop.exe", "", "", null)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.GamingApp_package\XboxPcApp.exe", "", "", "Games")]
     [InlineData(@"C:\tools\unrecognized.exe", "", "", null)]
     public void Classifies_shortcut_by_target_path_or_launcher(string target, string arguments, string working, string? expected)
     {

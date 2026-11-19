@@ -9,7 +9,7 @@ public static class DesktopShortcutClassifier
 
     private static readonly HashSet<string> GameExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
-        "steam.exe", "steamwebhelper.exe", "epicgameslauncher.exe", "xbox.exe", "gamingapp.exe",
+        "steam.exe", "steamwebhelper.exe", "epicgameslauncher.exe", "xbox.exe", "xboxpcapp.exe", "gamingapp.exe",
         "galaxyclient.exe", "battle.net.exe", "ubisoftconnect.exe", "upc.exe",
         "eadesktop.exe", "ealauncher.exe", "origin.exe", "riotclientservices.exe", "rockstargameslauncher.exe",
         "minecraftlauncher.exe", "minecraft.exe", "robloxplayerbeta.exe", "robloxplayerlauncher.exe", "playnite.desktopapp.exe", "playnite.fullscreenapp.exe", "itch.exe"
@@ -26,7 +26,7 @@ public static class DesktopShortcutClassifier
 
     private static readonly string[] GameSchemes = [
         "steam://", "com.epicgames.launcher://", "uplay://", "ubisoftconnect://", "origin://",
-        "origin2://", "eaapp://", "goggalaxy://", "battlenet://", "ms-xbox:", "xbox:", "ms-gamingoverlay:"];
+        "origin2://", "eaapp://", "link2ea://", "goggalaxy://", "battlenet://", "ms-xbox:", "xbox:", "ms-gamingoverlay:"];
     private static readonly string[] GameDirectories = [
         "/steamapps/common/", "/xboxgames/", "/epic games/", "/gog games/", "/ea games/",
         "/ubisoft game launcher/games/", "/riot games/", "/games/", "/gog galaxy/games/"];
@@ -40,24 +40,25 @@ public static class DesktopShortcutClassifier
         var target = shortcut.Target.Trim().Trim('"').Replace('\\', '/');
         var executable = target[(target.LastIndexOf('/') + 1)..];
         var arguments = shortcut.Arguments.Trim().Trim('"');
-        var launchValue = IsLauncher(executable) ? arguments : target;
+        var isExecutable = !target.Contains("://", StringComparison.Ordinal) &&
+            executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        var launchValue = isExecutable && IsLauncher(executable) ? arguments : target;
 
         if (GameSchemes.Any(scheme => launchValue.StartsWith(scheme, StringComparison.OrdinalIgnoreCase)) ||
-            IsStoreApp(launchValue, GameAppIds) || GameExecutables.Contains(executable))
+            IsStoreApp(launchValue, GameAppIds) || isExecutable && GameExecutables.Contains(executable))
         {
             return GamesFolder;
         }
 
-        if (IsStoreApp(launchValue, EditorAppIds) ||
-            EditorExecutables.Contains(executable) && IsKnownEditorPath(executable, target) ||
-            executable.StartsWith("gimp-", StringComparison.OrdinalIgnoreCase) &&
-            executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        if (IsStoreApp(launchValue, EditorAppIds) || isExecutable &&
+            (EditorExecutables.Contains(executable) && IsKnownEditorPath(executable, target) ||
+             executable.StartsWith("gimp-", StringComparison.OrdinalIgnoreCase)))
         {
             return EditorsFolder;
         }
 
         var workingDirectory = shortcut.WorkingDirectory.Replace('\\', '/').TrimEnd('/') + "/";
-        return executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+        return isExecutable &&
             GameDirectories.Any(directory => target.Contains(directory, StringComparison.OrdinalIgnoreCase) ||
                 workingDirectory.Contains(directory, StringComparison.OrdinalIgnoreCase))
             ? GamesFolder : null;
