@@ -55,19 +55,19 @@ public static class DesktopShortcutClassifier
         var launchValue = isExecutable && IsLauncher(executable) ? arguments : target;
 
         if (GameSchemes.Any(scheme => launchValue.StartsWith(scheme, StringComparison.OrdinalIgnoreCase)) ||
-            IsStoreApp(launchValue, GameAppIds) || isExecutable && GameExecutables.Contains(executable))
+            IsStoreApp(launchValue, GameAppIds) || isExecutable && (GameExecutables.Contains(executable) || DesktopShortcutCatalog.Games.Contains(executable)))
         {
             return GamesFolder;
         }
 
         if (IsStoreApp(launchValue, EditorAppIds) || isExecutable &&
-            (EditorExecutables.Contains(executable) && IsKnownEditorPath(executable, target) ||
+            ((EditorExecutables.Contains(executable) || DesktopShortcutCatalog.PhotoEditors.Contains(executable)) && IsKnownEditorPath(executable, target) ||
              executable.StartsWith("gimp-", StringComparison.OrdinalIgnoreCase)))
         {
             return EditorsFolder;
         }
 
-        if (isExecutable && UtilityExecutables.Contains(executable))
+        if (isExecutable && (UtilityExecutables.Contains(executable) || DesktopShortcutCatalog.Utilities.Contains(executable)))
             return UtilitiesFolder;
 
         var workingDirectory = shortcut.WorkingDirectory.Replace('\\', '/').TrimEnd('/') + "/";
