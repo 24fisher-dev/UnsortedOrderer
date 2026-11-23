@@ -4,8 +4,10 @@ using UnsortedOrderer.Models;
 
 namespace UnsortedOrderer.Services.Desktop;
 
-public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessageWriter log)
+public sealed class DesktopShortcutOrganizer(
+    IDesktopShortcutStore store, IMessageWriter log, Func<string, string, string>? moveFile = null)
 {
+    private readonly Func<string, string, string> _moveFile = moveFile ?? FileUtilities.MoveFile;
     internal static bool IsGroupFolder(string name) =>
         name.Equals(DesktopShortcutClassifier.GamesFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase) ||
@@ -51,7 +53,7 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
                     Directory.Exists(folder) && (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
                     throw new IOException($"Нет безопасной папки для группы «{folder}».");
 
-                FileUtilities.MoveFile(link, folder);
+                _moveFile(link, folder);
                 didMove = true;
                 log.WriteLine($"Ярлык перенесён в {category}: «{link}».");
             });
@@ -102,7 +104,15 @@ public sealed class DesktopShortcutOrganizer(IDesktopShortcutStore store, IMessa
             operation();
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or COMException
+        catch (UnauthorizedAccessException ex)
+        {
+            log.WriteLine($"Недостаточно прав для перемещения ярлыка «{path}». Ярлык оставлен на месте. " +
+                "Если он находится на общем рабочем столе Windows (C:\\Users\\Public\\Desktop), " +
+                "запустите UnsortedOrderer от имени администратора и повторите очистку. " +
+                $"Подробности: {ex.Message}");
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or COMException
             or ArgumentException or System.Reflection.TargetInvocationException
             or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
         {
