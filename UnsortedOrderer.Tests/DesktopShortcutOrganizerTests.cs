@@ -106,6 +106,33 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
         Assert.Equal(target, descriptor?.Target, ignoreCase: true);
     }
 
+    [Fact]
+    public void Access_denied_on_shared_desktop_keeps_shortcut_and_explains_elevation()
+    {
+        var desktop = Directory.CreateDirectory(Path.Combine(_root, "Public Desktop")).FullName;
+        var source = Directory.CreateDirectory(Path.Combine(_root, "Unsorted")).FullName;
+        var link = Path.Combine(desktop, "CPU-Z.lnk");
+        File.WriteAllText(link, @"C:\Apps\CPU-Z\cpuz.exe");
+        var log = new CapturingLog();
+        var organizer = new DesktopShortcutOrganizer(new TestStore(), log,
+            (_, _) => throw new UnauthorizedAccessException("Access denied"));
+
+        var result = organizer.Group(desktop, source, null, [link]);
+
+        Assert.Equal(0, result.Moved);
+        Assert.Equal(1, result.Left);
+        Assert.Equal(1, result.Errors);
+        Assert.True(File.Exists(link));
+        Assert.Contains(log.Messages, message => message.Contains("от имени администратора") &&
+            message.Contains("оставлен на месте") && message.Contains("CPU-Z.lnk"));
+    }
+
+    private sealed class CapturingLog : IMessageWriter
+    {
+        public readonly List<string> Messages = [];
+        public void WriteLine(string message) => Messages.Add(message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
