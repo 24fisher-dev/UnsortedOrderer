@@ -13,7 +13,7 @@ public sealed class DesktopShortcutOrganizer(
         name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.UtilitiesFolder, StringComparison.OrdinalIgnoreCase);
 
-    internal (int Moved, int Quarantined, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links)
+    public (int Moved, int Quarantined, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links)
     {
         var moved = 0;
         var quarantined = 0;
