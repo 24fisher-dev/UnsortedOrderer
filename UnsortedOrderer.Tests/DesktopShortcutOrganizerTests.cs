@@ -73,6 +73,25 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("Яндекс Телемост", @"C:\Program Files\Google\Chrome\Application\chrome_proxy.exe", "Communication")]
+    [InlineData("Meta Horizon Link", @"C:\Program Files\Meta\Meta Link\Launcher.exe", "VR")]
+    [InlineData("Raspberry Pi Imager", @"C:\Program Files\Raspberry Pi Imager\rpi-imager.exe", "Utilities")]
+    public void Groups_known_named_desktop_links_by_label_when_targets_are_wrappers(
+        string name, string target, string expected)
+    {
+        var desktop = Directory.CreateDirectory(Path.Combine(_root, Guid.NewGuid().ToString("N"))).FullName;
+        var link = Path.Combine(desktop, name + ".lnk");
+        File.WriteAllText(link, target);
+        var organizer = new DesktopShortcutOrganizer(new TestStore(), new NullLog());
+
+        var result = organizer.Group(desktop, Path.Combine(_root, "Unsorted"), null, [link]);
+
+        Assert.Equal(1, result.Moved);
+        Assert.Equal(0, result.Errors);
+        Assert.True(File.Exists(Path.Combine(desktop, expected, name + ".lnk")));
+    }
+
     [Fact]
     public void Cleanup_groups_shortcuts_and_preserves_groups_and_folder_links_on_repeat()
     {

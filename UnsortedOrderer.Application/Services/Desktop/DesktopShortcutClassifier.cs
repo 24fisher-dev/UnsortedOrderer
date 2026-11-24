@@ -19,7 +19,8 @@ public static class DesktopShortcutClassifier
         "aida64.exe", "msiafterburner.exe", "rtss.exe", "cpuz.exe", "cpuz_x64.exe",
         "gpuz.exe", "gpu-z.exe", "hwinfo.exe", "hwinfo64.exe", "hwmonitor.exe", "hwmonitor_x64.exe",
         "diskinfo.exe", "diskinfo64.exe", "diskmark.exe", "diskmark64.exe", "rufus.exe",
-        "autoruns.exe", "autoruns64.exe", "procexp.exe", "procexp64.exe", "procmon.exe", "procmon64.exe"
+        "autoruns.exe", "autoruns64.exe", "procexp.exe", "procexp64.exe", "procmon.exe", "procmon64.exe",
+        "rpi-imager.exe", "raspberry pi imager.exe"
     };
 
     private static readonly HashSet<string> GameExecutables = new(StringComparer.OrdinalIgnoreCase)
@@ -92,7 +93,7 @@ public static class DesktopShortcutClassifier
     private static readonly string[] EditorAppIds = [
         "Microsoft.Paint_", "AffinityPhoto", "AffinityDesigner", "Adobe.Photoshop", "GIMP.GIMP", "Inkscape.Inkscape"];
 
-    public static string? GetFolder(DesktopShortcut shortcut)
+    public static string? GetFolder(DesktopShortcut shortcut, string? shortcutName = null)
     {
         var target = shortcut.Target.Trim().Trim('"').Replace('\\', '/');
         var executable = target[(target.LastIndexOf('/') + 1)..];
@@ -100,6 +101,18 @@ public static class DesktopShortcutClassifier
         var isExecutable = !target.Contains("://", StringComparison.Ordinal) &&
             executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
         var launchValue = isExecutable && IsLauncher(executable) ? arguments : target;
+        // Browser-installed PWAs and shell launchers often hide the application
+        // behind a generic executable. Exact known names require an app/URL target.
+        if (IsKnownNamedApplication(shortcutName, target, isExecutable))
+            return shortcutName!.Trim() switch
+            {
+                var name when name.Equals("Яндекс Телемост", StringComparison.OrdinalIgnoreCase) ||
+                              name.Equals("Yandex Telemost", StringComparison.OrdinalIgnoreCase) => CommunicationFolder,
+                var name when name.Equals("Meta Horizon Link", StringComparison.OrdinalIgnoreCase) ||
+                              name.Equals("Oculus", StringComparison.OrdinalIgnoreCase) => VrFolder,
+                _ => UtilitiesFolder
+            };
+
 
         // VR launchers must not be swallowed by the broader Games category.
         if (isExecutable && VrExecutables.Contains(executable) ||
@@ -142,6 +155,22 @@ public static class DesktopShortcutClassifier
             GameDirectories.Any(directory => target.Contains(directory, StringComparison.OrdinalIgnoreCase) ||
                 workingDirectory.Contains(directory, StringComparison.OrdinalIgnoreCase))
             ? GamesFolder : null;
+    }
+
+    private static bool IsKnownNamedApplication(string? name, string target, bool isExecutable)
+    {
+        if (string.IsNullOrWhiteSpace(name) || !(
+            name.Trim().Equals("Яндекс Телемост", StringComparison.OrdinalIgnoreCase) ||
+            name.Trim().Equals("Yandex Telemost", StringComparison.OrdinalIgnoreCase) ||
+            name.Trim().Equals("Meta Horizon Link", StringComparison.OrdinalIgnoreCase) ||
+            name.Trim().Equals("Oculus", StringComparison.OrdinalIgnoreCase) ||
+            name.Trim().Equals("Raspberry Pi Imager", StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        return isExecutable ||
+            target.StartsWith("shell:AppsFolder/", StringComparison.OrdinalIgnoreCase) ||
+            Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
     private static bool BrowsersExecutablesMatch(string executable, string target) =>

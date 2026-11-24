@@ -33,7 +33,7 @@ public sealed class ReportedDesktopShortcutTests
     [InlineData("GitHub Desktop", @"C:\Apps\GitHubDesktop\GitHubDesktop.exe", "Development")]
     [InlineData("Guitar Pro 8", @"C:\Apps\Guitar Pro 8\GuitarPro.exe", "Music")]
     [InlineData("GTP — концертные версии", @"D:\Guitar\GTP", null)]
-    [InlineData("Raspberry Pi Imager", @"C:\Apps\Raspberry Pi Imager\rpi-imager.exe", null)]
+    [InlineData("Raspberry Pi Imager", @"C:\Apps\Raspberry Pi Imager\rpi-imager.exe", "Utilities")]
     [InlineData("Яндекс Телемост", "https://telemost.yandex.ru", "Communication")]
     [InlineData("Moises", @"C:\Apps\Moises\Moises.exe", "Music")]
     [InlineData("_Unsorted — ярлык", @"D:\_Unsorted", null)]
@@ -47,6 +47,23 @@ public sealed class ReportedDesktopShortcutTests
     {
         var actual = DesktopShortcutClassifier.GetFolder(new DesktopShortcut(target));
         Assert.True(folder == actual, $"{label}: expected {folder ?? "stay"}, got {actual ?? "stay"}");
+    }
+
+    [Theory]
+    [InlineData("Яндекс Телемост", @"C:\Program Files\Google\Chrome\Application\chrome_proxy.exe", "--profile-directory=Default --app-id=abc123", "Communication")]
+    [InlineData("Yandex Telemost", @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge_proxy.exe", "--app-id=abc123", "Communication")]
+    [InlineData("Яндекс Телемост", @"C:\Program Files\Yandex\YandexBrowser\Application\browser.exe", "--app=https://telemost.yandex.ru", "Communication")]
+    [InlineData("Meta Horizon Link", @"C:\Program Files\Meta\Link\Launcher.exe", "", "VR")]
+    [InlineData("Meta Horizon Link", @"shell:AppsFolder\Meta.Link_123!App", "", "VR")]
+    [InlineData("Raspberry Pi Imager", @"C:\Program Files\Raspberry Pi Imager\App.exe", "", "Utilities")]
+    [InlineData("Random Tool", @"C:\Apps\launcher.exe", "", null)]
+    [InlineData("Яндекс Телемост", @"C:\Users\me\Documents\notes.txt", "", null)]
+    [InlineData("Meta Horizon Link", @"D:\Pictures", "", null)]
+    [InlineData("Raspberry Pi Imager", "", "", null)]
+    public void Named_app_shortcuts_cover_wrapped_launchers_without_moving_files_or_folders(
+        string label, string target, string arguments, string? expected)
+    {
+        Assert.Equal(expected, DesktopShortcutClassifier.GetFolder(new DesktopShortcut(target, arguments), label));
     }
 
     [Fact]
