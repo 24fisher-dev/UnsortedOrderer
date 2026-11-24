@@ -12,6 +12,7 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
     private readonly string _commonDesktopPath;
     private readonly ApplicationLocation _application;
     private readonly DesktopShortcutOrganizer _shortcuts;
+    private readonly IDesktopShortcutStore _shortcutStore;
     private readonly Action<FileSystemInfo, string> _moveEntry;
 
     public DesktopCleanupService(IMessageWriter messageWriter)
@@ -29,7 +30,8 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         _desktopPath = desktopPath;
         _commonDesktopPath = commonDesktopPath ?? string.Empty;
         _application = application;
-        _shortcuts = new DesktopShortcutOrganizer(shortcutStore ?? new DesktopShortcutStore(), messageWriter);
+        _shortcutStore = shortcutStore ?? new DesktopShortcutStore();
+        _shortcuts = new DesktopShortcutOrganizer(_shortcutStore, messageWriter);
         _moveEntry = moveEntry ?? MoveEntry;
     }
 
@@ -62,10 +64,47 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         if (common)
             Prepare(_commonDesktopPath, "Общий рабочий стол", CanCleanCommon(unsortedPath));
 
+        // Explorer overlays the personal and shared desktops. Keep a single visible folder
+        // per category, then route both roots' shortcuts into that same folder.
+        // Only selected roots are consolidated; unchecked roots remain untouched.
+        var categoryDesktop = personal && roots.Any(root => ApplicationLocation.SamePath(root.Path, _desktopPath))
+            ? _desktopPath : roots.FirstOrDefault()?.Path;
+        if (categoryDesktop is not null)
+        {
+            var protectedShortcutTargets = new List<string>();
+            foreach (var root in roots)
+            {
+                foreach (var link in root.Entries.Where(IsShortcut))
+                {
+                    try
+                    {
+                        var info = _shortcutStore.Read(link.FullName);
+                        if (info is null) continue;
+                        foreach (var path in new[] { info.Target, info.WorkingDirectory })
+                        {
+                            if (Path.IsPathFullyQualified(path))
+                                protectedShortcutTargets.Add(path);
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                        or System.Runtime.InteropServices.COMException or ArgumentException
+                        or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
+                    {
+                        // A potentially referenced folder cannot be safely relocated.
+                        protectedShortcutTargets.Add(root.Path);
+                        _messageWriter.WriteLine($"Не удалось прочитать ярлык для проверки папок: {link.FullName}. {ex.Message}");
+                    }
+                }
+            }
+            errors += DesktopShortcutGroupFolder.Consolidate(
+                roots.Select(root => root.Path), categoryDesktop, unsortedPath, sortedPath,
+                _application, protectedShortcutTargets, _messageWriter);
+        }
+
         // Resolve shortcuts on both roots before moving any ordinary desktop entry.
         // A shared shortcut can point to an entry on the personal desktop or vice versa.
         var shortcutResults = roots.Select(root => _shortcuts.Group(root.Path, unsortedPath, sortedPath,
-            root.Entries.Where(IsShortcut).Select(entry => entry.FullName))).ToArray();
+            root.Entries.Where(IsShortcut).Select(entry => entry.FullName), categoryDesktop)).ToArray();
 
         for (var i = 0; i < roots.Count; i++)
         {

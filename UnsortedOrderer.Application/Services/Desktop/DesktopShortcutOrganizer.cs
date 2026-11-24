@@ -8,7 +8,9 @@ public sealed class DesktopShortcutOrganizer(
     IDesktopShortcutStore store, IMessageWriter log, Func<string, string, string>? moveFile = null)
 {
     private readonly Func<string, string, string> _moveFile = moveFile ?? FileUtilities.MoveFile;
-    internal static bool IsGroupFolder(string name) =>
+    internal static bool IsGroupFolder(string name) => DesktopShortcutGroupFolder.ParseCategory(name) is not null;
+
+    private static bool IsLegacyGroupFolder(string name) =>
         name.Equals(DesktopShortcutClassifier.GamesFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.UtilitiesFolder, StringComparison.OrdinalIgnoreCase) ||
@@ -19,7 +21,7 @@ public sealed class DesktopShortcutOrganizer(
         name.Equals(DesktopShortcutClassifier.CommunicationFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.PrintingFolder, StringComparison.OrdinalIgnoreCase);
 
-    public (int Moved, int Quarantined, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links)
+    public (int Moved, int Quarantined, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links, string? targetDesktop = null)
     {
         var moved = 0;
         var quarantined = 0;
@@ -51,7 +53,7 @@ public sealed class DesktopShortcutOrganizer(
                 if (category is null)
                     return;
 
-                var folder = Path.Combine(desktop, category);
+                var folder = Path.Combine(targetDesktop ?? desktop, category);
                 if (ApplicationLocation.ContainsPath(folder, source) ||
                     destination is not null && ApplicationLocation.ContainsPath(folder, destination))
                     throw new IOException($"Группа совпадает с папкой сортировки: «{folder}».");

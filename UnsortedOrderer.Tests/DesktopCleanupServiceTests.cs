@@ -344,6 +344,111 @@ public class DesktopCleanupServiceTests
         }
     }
 
+
+    [Fact]
+    public void Personal_and_public_desktop_duplicate_groups_merge_and_repeated_runs_are_idempotent()
+    {
+        using var root = new TestFolder();
+        var personal = Directory.CreateDirectory(Path.Combine(root.Path, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root.Path, "Public")).FullName;
+        var a = Directory.CreateDirectory(Path.Combine(personal, "Games")).FullName;
+        var b = Directory.CreateDirectory(Path.Combine(personal, "Games (1)")).FullName;
+        var c = Directory.CreateDirectory(Path.Combine(shared, "Games")).FullName;
+        var d = Directory.CreateDirectory(Path.Combine(shared, "Games(2)")).FullName;
+        File.WriteAllText(Path.Combine(a, "same.lnk"), "personal");
+        File.WriteAllText(Path.Combine(b, "same.lnk"), "duplicate");
+        File.WriteAllText(Path.Combine(c, "same.lnk"), "public");
+        File.WriteAllText(Path.Combine(d, "other.url"), "other");
+        var personalUtility = Directory.CreateDirectory(Path.Combine(personal, "Utilities")).FullName;
+        var publicUtility = Directory.CreateDirectory(Path.Combine(shared, "Utilities")).FullName;
+        File.WriteAllText(Path.Combine(personalUtility, "One.lnk"), "one");
+        File.WriteAllText(Path.Combine(publicUtility, "Two.lnk"), "two");
+        var logger = new RecordingLog();
+        var cleaner = new DesktopCleanupService(logger, personal, new ApplicationLocation(root.Path, null),
+            new TestShortcutStore(new Dictionary<string, string>()), commonDesktopPath: shared);
+
+        for (var n = 0; n < 2; n++)
+            Assert.Equal(0, cleaner.CleanSelected(Path.Combine(root.Path, "Unsorted"),
+                Path.Combine(root.Path, "Sorted"), personal: true, common: true));
+
+        Assert.Equal(new[] { "duplicate", "personal", "public" },
+            Directory.GetFiles(Path.Combine(personal, "Games"), "*.lnk")
+                .Select(File.ReadAllText).OrderBy(x => x));
+        Assert.True(File.Exists(Path.Combine(personal, "Games", "other.url")));
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(personal, "Utilities")).Length);
+        Assert.Single(Directory.GetDirectories(personal, "Games*"));
+        Assert.Empty(Directory.GetDirectories(shared, "Games*"));
+        Assert.Empty(Directory.GetDirectories(shared, "Utilities*"));
+        Assert.Contains(logger.Lines, line => line.Contains("Объединена категория Games"));
+    }
+
+    [Fact]
+    public void When_common_desktop_is_not_selected_its_folders_are_not_modified()
+    {
+        using var root = new TestFolder();
+        var personal = Directory.CreateDirectory(Path.Combine(root.Path, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root.Path, "Public")).FullName;
+        var sharedGames = Directory.CreateDirectory(Path.Combine(shared, "Games")).FullName;
+        File.WriteAllText(Path.Combine(sharedGames, "Original.lnk"), "public");
+        var personalGames = Directory.CreateDirectory(Path.Combine(personal, "Games (1)")).FullName;
+        File.WriteAllText(Path.Combine(personalGames, "Personal.lnk"), "mine");
+        var cleaner = new DesktopCleanupService(new RecordingLog(), personal,
+            new ApplicationLocation(root.Path, null), new TestShortcutStore(new Dictionary<string, string>()),
+            commonDesktopPath: shared);
+
+        Assert.Equal(0, cleaner.CleanSelected(Path.Combine(root.Path, "Unsorted"),
+            Path.Combine(root.Path, "Sorted"), personal: true, common: false));
+
+        Assert.True(File.Exists(Path.Combine(personal, "Games", "Personal.lnk")));
+        Assert.False(Directory.Exists(personalGames));
+        Assert.True(File.Exists(Path.Combine(sharedGames, "Original.lnk")));
+    }
+
+    [Fact]
+    public void Category_holding_running_application_is_not_consolidated()
+    {
+        using var root = new TestFolder();
+        var personal = Directory.CreateDirectory(Path.Combine(root.Path, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root.Path, "Public")).FullName;
+        var portable = Directory.CreateDirectory(Path.Combine(shared, "Games (1)", "Current")).FullName;
+        var exe = Path.Combine(portable, "UnsortedOrderer.exe");
+        File.WriteAllText(exe, "running");
+        var cleaner = new DesktopCleanupService(new RecordingLog(), personal,
+            new ApplicationLocation(portable, exe), new TestShortcutStore(new Dictionary<string, string>()),
+            commonDesktopPath: shared);
+        Assert.Equal(0, cleaner.CleanSelected(Path.Combine(root.Path, "Unsorted"),
+            Path.Combine(root.Path, "Sorted"), personal: true, common: true));
+        Assert.Equal("running", File.ReadAllText(exe));
+        Assert.True(Directory.Exists(Path.Combine(shared, "Games (1)")));
+    }
+
+    [Fact]
+    public void Category_referenced_by_shortcut_is_preserved_to_avoid_breaking_link()
+    {
+        using var root = new TestFolder();
+        var personal = Directory.CreateDirectory(Path.Combine(root.Path, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root.Path, "Public")).FullName;
+        var legacy = Directory.CreateDirectory(Path.Combine(shared, "Games (1)")).FullName;
+        File.WriteAllText(Path.Combine(legacy, "Game.lnk"), "game");
+        var reference = Path.Combine(personal, "Old games.lnk");
+        File.WriteAllText(reference, legacy);
+        var store = new LocalFolderShortcutStore();
+        var cleaner = new DesktopCleanupService(new RecordingLog(), personal,
+            new ApplicationLocation(root.Path, null), store, commonDesktopPath: shared);
+        Assert.Equal(0, cleaner.CleanSelected(Path.Combine(root.Path, "Unsorted"),
+            Path.Combine(root.Path, "Sorted"), personal: true, common: true));
+        Assert.True(Directory.Exists(legacy));
+        Assert.True(File.Exists(reference));
+        Assert.True(File.Exists(Path.Combine(legacy, "Game.lnk")));
+    }
+
+    private sealed class TestFolder : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        public TestFolder() => Directory.CreateDirectory(Path);
+        public void Dispose() => Directory.Delete(Path, recursive: true);
+    }
+
     private sealed class RecordingLog : IMessageWriter
     {
         public List<string> Lines { get; } = [];

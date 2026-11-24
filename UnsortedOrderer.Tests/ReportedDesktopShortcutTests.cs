@@ -34,7 +34,7 @@ public sealed class ReportedDesktopShortcutTests
     [InlineData("Guitar Pro 8", @"C:\Apps\Guitar Pro 8\GuitarPro.exe", "Music")]
     [InlineData("GTP — концертные версии", @"D:\Guitar\GTP", null)]
     [InlineData("Raspberry Pi Imager", @"C:\Apps\Raspberry Pi Imager\rpi-imager.exe", null)]
-    [InlineData("Яндекс Телемост", "https://telemost.yandex.ru", null)]
+    [InlineData("Яндекс Телемост", "https://telemost.yandex.ru", "Communication")]
     [InlineData("Moises", @"C:\Apps\Moises\Moises.exe", "Music")]
     [InlineData("_Unsorted — ярлык", @"D:\_Unsorted", null)]
     [InlineData("Prime Studio For M2", @"C:\Apps\Prime Studio For M2\Prime Studio For M2.exe", "Music")]
