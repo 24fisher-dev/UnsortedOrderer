@@ -38,7 +38,7 @@ public static class DesktopShortcutClassifier
         "lightroomclassic.exe", "krita.exe", "gimp.exe", "inkscape.exe", "paintdotnet.exe", "mspaint.exe",
         "photo.exe", "designer.exe", "affinity.exe", "coreldrw.exe", "corelpp.exe",
         "psp.exe", "paintshoppro.exe", "captureone.exe", "darktable.exe", "rawtherapee.exe",
-        "epplus.exe", "epsonphotoplus.exe", "epson photo+.exe", "photolab.exe", "aseprite.exe", "clipstudiopaint.exe", "figma.exe", "luminarneo.exe", "xnview.exe", "xnviewmp.exe"
+        "epplus.exe", "epsonphotoplus.exe", "epson photo+.exe", "lightroom portable.exe", "photolab.exe", "aseprite.exe", "clipstudiopaint.exe", "figma.exe", "luminarneo.exe", "xnview.exe", "xnviewmp.exe"
     };
 
     private static readonly HashSet<string> VrExecutables = new(StringComparer.OrdinalIgnoreCase)
@@ -46,7 +46,7 @@ public static class DesktopShortcutClassifier
         "vrmonitor.exe", "steamvr.exe", "vrcompositor.exe", "vrserver.exe",
         "oculusclient.exe", "oculusdash.exe", "metahorizonlink.exe", "virtualdesktop.streamer.exe",
         "virtualdesktop.streamer", "pimaxplay.exe", "pimaxclient.exe", "viveconsole.exe",
-        "sidequest.exe", "qloader.exe", "alvr_dashboard.exe"
+        "sidequest.exe", "qloader.exe", "qloader64.exe", "alvr_dashboard.exe"
     };
     private static readonly HashSet<string> MusicExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -77,7 +77,7 @@ public static class DesktopShortcutClassifier
     {
         "bambu-studio.exe", "bambustudio.exe", "orca-slicer.exe", "orcaslicer.exe",
         "prusaslicer.exe", "cura.exe", "ultimakercura.exe", "lycheeslicer.exe",
-        "chitubox.exe", "fusion360.exe"
+        "chitubox.exe", "fusion360.exe", "fusionlauncher.exe", "fusion360launcher.exe"
     };
 
     private static readonly string[] CommunicationWebDomains = ["telemost.yandex.ru"];
@@ -104,12 +104,17 @@ public static class DesktopShortcutClassifier
         // Browser-installed PWAs and shell launchers often hide the application
         // behind a generic executable. Exact known names require an app/URL target.
         if (IsKnownNamedApplication(shortcutName, target, isExecutable))
-            return shortcutName!.Trim() switch
+            return NormalizeShortcutName(shortcutName!) switch
             {
                 var name when name.Equals("Яндекс Телемост", StringComparison.OrdinalIgnoreCase) ||
                               name.Equals("Yandex Telemost", StringComparison.OrdinalIgnoreCase) => CommunicationFolder,
                 var name when name.Equals("Meta Horizon Link", StringComparison.OrdinalIgnoreCase) ||
                               name.Equals("Oculus", StringComparison.OrdinalIgnoreCase) => VrFolder,
+                var name when name.Equals("QLoader", StringComparison.OrdinalIgnoreCase) => VrFolder,
+                var name when name.StartsWith("Lightroom Portable", StringComparison.OrdinalIgnoreCase) ||
+                              name.Equals("Lightroom", StringComparison.OrdinalIgnoreCase) => EditorsFolder,
+                var name when name.StartsWith("Epson Photo+", StringComparison.OrdinalIgnoreCase) => EditorsFolder,
+                var name when name.Equals("Autodesk Fusion", StringComparison.OrdinalIgnoreCase) => PrintingFolder,
                 _ => UtilitiesFolder
             };
 
@@ -159,18 +164,35 @@ public static class DesktopShortcutClassifier
 
     private static bool IsKnownNamedApplication(string? name, string target, bool isExecutable)
     {
-        if (string.IsNullOrWhiteSpace(name) || !(
-            name.Trim().Equals("Яндекс Телемост", StringComparison.OrdinalIgnoreCase) ||
-            name.Trim().Equals("Yandex Telemost", StringComparison.OrdinalIgnoreCase) ||
-            name.Trim().Equals("Meta Horizon Link", StringComparison.OrdinalIgnoreCase) ||
-            name.Trim().Equals("Oculus", StringComparison.OrdinalIgnoreCase) ||
-            name.Trim().Equals("Raspberry Pi Imager", StringComparison.OrdinalIgnoreCase)))
+        var normalized = NormalizeShortcutName(name ?? "");
+        if (normalized.Length == 0 || !(
+            normalized.Equals("QLoader", StringComparison.OrdinalIgnoreCase) ||
+            normalized.StartsWith("Lightroom Portable", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Lightroom", StringComparison.OrdinalIgnoreCase) ||
+            normalized.StartsWith("Epson Photo+", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Autodesk Fusion", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Яндекс Телемост", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Yandex Telemost", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Meta Horizon Link", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Oculus", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Raspberry Pi Imager", StringComparison.OrdinalIgnoreCase)))
             return false;
 
         return isExecutable ||
             target.StartsWith("shell:AppsFolder/", StringComparison.OrdinalIgnoreCase) ||
             Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private static string NormalizeShortcutName(string name)
+    {
+        var title = name.Trim();
+        foreach (var suffix in new[] { " — ярлык", " - ярлык", " - shortcut", " — shortcut" })
+            if (title.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                title = title[..^suffix.Length].TrimEnd();
+        if (title.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            title = title[..^4];
+        return title;
     }
 
     private static bool BrowsersExecutablesMatch(string executable, string target) =>
