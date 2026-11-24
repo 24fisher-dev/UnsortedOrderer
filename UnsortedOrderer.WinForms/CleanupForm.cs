@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.ComponentModel;
+using System.Security.Principal;
+using UnsortedOrderer.Services.Desktop;
 using Microsoft.Extensions.DependencyInjection;
 using UnsortedOrderer.Infrastructure.Updates;
 using UnsortedOrderer.Application.Application;
@@ -23,13 +25,15 @@ internal sealed class CleanupForm : Form
     private readonly Button _deleteTrash = new() { Text = "Удалить файлы из корзины навсегда", AutoSize = true };
     private readonly Label _status = new() { AutoSize = true };
     private readonly ProgressBar _progress = new() { Dock = DockStyle.Fill, Height = 18 };
-    private readonly TextBox _journal = new()
+    private readonly RichTextBox _journal = new()
     {
         AccessibleName = "Журнал очистки",
         Dock = DockStyle.Fill,
         Multiline = true,
         ReadOnly = true,
-        ScrollBars = ScrollBars.Vertical
+        ScrollBars = RichTextBoxScrollBars.Vertical,
+        BorderStyle = BorderStyle.FixedSingle,
+        DetectUrls = false
     };
     private readonly LinkLabel _updateLink = new() { AutoSize = true, Visible = false };
     private readonly CancellationTokenSource _updateCancellation = new();
@@ -100,8 +104,11 @@ internal sealed class CleanupForm : Form
         }
         Controls.Add(layout);
 
-        Shown += async (_, _) => await UpdateNotification.CheckAndShowAsync(
-            _updateLink, currentVersion, _updateCancellation.Token);
+        Shown += async (_, _) =>
+        {
+            WarnIfNotElevated();
+            await UpdateNotification.CheckAndShowAsync(_updateLink, currentVersion, _updateCancellation.Token);
+        };
         _start.Click += async (_, _) => await StartCleanupAsync();
         _openSorted.Click += (_, _) => OpenFolder(_settings.DestinationRoot, "Sorted");
         _openTrash.Click += (_, _) => OpenFolder(TrashPath, "Корзина Sorted");
@@ -125,6 +132,7 @@ internal sealed class CleanupForm : Form
         _running = true;
         _desktop.Enabled = _commonDesktop.Enabled = _downloads.Enabled = _start.Enabled = _exit.Enabled = false;
         _progress.Style = ProgressBarStyle.Marquee;
+        _status.ForeColor = SystemColors.ControlText;
         _status.Text = "Подготовка к очистке…";
         _logTimer.Start();
 
@@ -163,6 +171,7 @@ internal sealed class CleanupForm : Form
             FlushLog();
             _progress.Style = ProgressBarStyle.Blocks;
             _progress.Value = failedEntries.HasValue ? _progress.Maximum : 0;
+            _status.ForeColor = failedEntries == 0 ? Color.DarkGreen : Color.Firebrick;
             _status.Text = failedEntries switch
             {
                 0 => "Очистка завершена.",
@@ -194,6 +203,7 @@ internal sealed class CleanupForm : Form
         _trashActions.Visible = _trashStatus.Visible = false;
         _journal.Clear();
         _progress.Value = 0;
+        _status.ForeColor = SystemColors.ControlText;
         _status.Text = "Выберите нужные опции и начните очистку.";
         _restart.Visible = _openSorted.Visible = false;
         _start.Visible = _start.Enabled = true;
@@ -218,6 +228,7 @@ internal sealed class CleanupForm : Form
             hasFiles = true;
         }
 
+        _trashStatus.ForeColor = SystemColors.ControlText;
         _trashStatus.Visible = true;
         _trashActions.Visible = hasFiles;
         _trashStatus.Text = hasFiles
@@ -241,11 +252,13 @@ internal sealed class CleanupForm : Form
                 provider.GetRequiredService<FileOrganizerApplication>().ClearQuarantine();
             });
             _trashActions.Visible = false;
+            _trashStatus.ForeColor = Color.DarkGreen;
             _trashStatus.Text = "Корзина очищена.";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _log.WriteLine($"Не удалось очистить корзину «{TrashPath}»: {ex.Message}");
+            _trashStatus.ForeColor = Color.Firebrick;
             _trashStatus.Text = "Корзину не удалось очистить полностью. См. журнал.";
         }
         finally
@@ -290,7 +303,39 @@ internal sealed class CleanupForm : Form
             _journal.Select(0, Math.Max(overflow, Math.Min(6_000, _journal.TextLength)));
             _journal.SelectedText = string.Empty;
         }
-        _journal.AppendText(text);
+        // Append one line at a time to preserve color even when a batch contains mixed messages.
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.Length == 0)
+                continue;
+            _journal.SelectionStart = _journal.TextLength;
+            _journal.SelectionLength = 0;
+            _journal.SelectionColor = LogLineSeverity.IsError(line) ? Color.Firebrick : SystemColors.WindowText;
+            _journal.AppendText(line + "\n");
+        }
+        _journal.SelectionColor = SystemColors.WindowText;
+        _journal.SelectionStart = _journal.TextLength;
+        _journal.ScrollToCaret();
+    }
+
+    private void WarnIfNotElevated()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            if (new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
+                return;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            _log.WriteLine($"Не удалось проверить права администратора: {ex.Message}");
+        }
+        MessageBox.Show(this,
+            "Приложение запущено без прав администратора. Часть файлов и ярлыков общего рабочего стола может быть недоступна.\n\n" +
+            "Рекомендуется закрыть программу и запустить её через «Запуск от имени администратора». " +
+            "Можно продолжить без повышения прав, но возможны ошибки переноса.",
+            "UnsortedOrderer: права администратора",
+            MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

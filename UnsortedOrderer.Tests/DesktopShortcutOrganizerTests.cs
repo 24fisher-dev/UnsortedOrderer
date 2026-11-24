@@ -47,6 +47,32 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
         Assert.Equal(expected, DesktopShortcutClassifier.GetFolder(new DesktopShortcut(target, arguments, working)));
     }
 
+    [Theory]
+    [InlineData(@"C:\Program Files\SteamVR\bin\win64\vrmonitor.exe", "VR")]
+    [InlineData(@"C:\Program Files\Oculus\Support\oculus-client\OculusClient.exe", "VR")]
+    [InlineData(@"C:\Program Files\Meta\Meta Horizon Link\MetaHorizonLink.exe", "VR")]
+    [InlineData(@"C:\Apps\Spotify.exe", "Music")]
+    [InlineData(@"C:\DAW\reaper.exe", "Music")]
+    [InlineData(@"C:\Apps\Code.exe", "Development")]
+    [InlineData(@"C:\Program Files\JetBrains\Rider\rider64.exe", "Development")]
+    [InlineData(@"C:\Program Files\Docker\Docker\Docker Desktop.exe", "Development")]
+    [InlineData(@"C:\Program Files\Google\Chrome\chrome.exe", "Browsers")]
+    [InlineData(@"C:\Apps\Telegram.exe", "Communication")]
+    [InlineData(@"C:\Apps\Discord.exe", "Communication")]
+    [InlineData(@"C:\Program Files\Bambu Studio\bambu-studio.exe", "3DPrinting")]
+    [InlineData(@"C:\Apps\OrcaSlicer.exe", "3DPrinting")]
+    [InlineData(@"C:\Apps\unknown-tool.exe", null)]
+    public void New_shortcut_groups_are_classified_without_guessing_unknown_apps(string target, string? expected)
+    {
+        Assert.Equal(expected, DesktopShortcutClassifier.GetFolder(new DesktopShortcut(target)));
+        if (expected is not null)
+        {
+            var method = typeof(DesktopShortcutOrganizer).GetMethod("IsGroupFolder",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            Assert.True((bool)method.Invoke(null, new object[] { expected })!);
+        }
+    }
+
     [Fact]
     public void Cleanup_groups_shortcuts_and_preserves_groups_and_folder_links_on_repeat()
     {
