@@ -66,7 +66,11 @@ public sealed class DesktopShortcutOrganizerTests : IDisposable
     {
         Assert.Equal(expected, DesktopShortcutClassifier.GetFolder(new DesktopShortcut(target)));
         if (expected is not null)
-            Assert.True(DesktopShortcutOrganizer.IsGroupFolder(expected));
+        {
+            var method = typeof(DesktopShortcutOrganizer).GetMethod("IsGroupFolder",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            Assert.True((bool)method.Invoke(null, new object[] { expected })!);
+        }
     }
 
     [Fact]
