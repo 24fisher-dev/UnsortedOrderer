@@ -62,10 +62,21 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         if (common)
             Prepare(_commonDesktopPath, "Общий рабочий стол", CanCleanCommon(unsortedPath));
 
+        // Explorer overlays the personal and shared desktops. Keep a single visible folder
+        // per category, then route both roots' shortcuts into that same folder.
+        // Only selected roots are consolidated; unchecked roots remain untouched.
+        var categoryDesktop = personal && roots.Any(root => ApplicationLocation.SamePath(root.Path, _desktopPath))
+            ? _desktopPath : roots.FirstOrDefault()?.Path;
+        if (categoryDesktop is not null)
+        {
+            errors += DesktopShortcutGroupFolder.Consolidate(
+                roots.Select(root => root.Path), categoryDesktop, unsortedPath, sortedPath, _messageWriter);
+        }
+
         // Resolve shortcuts on both roots before moving any ordinary desktop entry.
         // A shared shortcut can point to an entry on the personal desktop or vice versa.
         var shortcutResults = roots.Select(root => _shortcuts.Group(root.Path, unsortedPath, sortedPath,
-            root.Entries.Where(IsShortcut).Select(entry => entry.FullName))).ToArray();
+            root.Entries.Where(IsShortcut).Select(entry => entry.FullName), categoryDesktop)).ToArray();
 
         for (var i = 0; i < roots.Count; i++)
         {
