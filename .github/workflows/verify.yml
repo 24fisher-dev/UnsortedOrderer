@@ -37,6 +37,24 @@ jobs:
           if ([version]$embeddedVersion -ne [version]$filenameVersion) {
             throw "Embedded version $embeddedVersion differs from filename version $filenameVersion"
           }
+          # Verify the Windows RT_MANIFEST in the final published EXE using SDK mt.exe.
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          $mt = Get-ChildItem -LiteralPath $sdkRoot -Filter mt.exe -Recurse -ErrorAction Stop |
+            Where-Object { $_.Directory.Name -eq 'x64' } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $mt) { throw 'Windows SDK mt.exe was not found' }
+          $manifestPath = Join-Path $env:RUNNER_TEMP 'published-app.manifest'
+          & $mt.FullName "-inputresource:$($files[0].FullName);#1" "-out:$manifestPath"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $manifestPath)) {
+            throw 'Could not extract the published EXE manifest'
+          }
+          [xml]$manifest = Get-Content -Raw -LiteralPath $manifestPath
+          $ns = New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
+          $ns.AddNamespace('asmv3', 'urn:schemas-microsoft-com:asm.v3')
+          $level = $manifest.SelectSingleNode('//asmv3:requestedExecutionLevel', $ns)
+          if (-not $level -or $level.level -ne 'requireAdministrator' -or $level.uiAccess -ne 'false') {
+            throw 'Published EXE must embed requireAdministrator, uiAccess=false'
+          }
       - name: Upload Windows x64 build from main
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
