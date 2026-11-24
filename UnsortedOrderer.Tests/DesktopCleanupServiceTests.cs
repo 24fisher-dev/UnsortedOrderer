@@ -74,7 +74,7 @@ public class DesktopCleanupServiceTests
 
             Assert.Equal("preserve", File.ReadAllText(Path.Combine(lockedFolder, "data.txt")));
             Assert.Equal("move", File.ReadAllText(Path.Combine(destination, "transfer.txt")));
-            Assert.True(File.Exists(Path.Combine(desktop, "Games", "SteamVR.url")));
+            Assert.True(File.Exists(Path.Combine(desktop, "VR", "SteamVR.url")));
             Assert.Contains(logger.Lines, line => line.Contains(lockedFolder) && line.Contains("locked"));
             Assert.Contains(logger.Lines, line => line.Contains("Ошибок переноса: 1"));
         }
@@ -164,7 +164,7 @@ public class DesktopCleanupServiceTests
         {
             var steamLink = Path.Combine(shared, "Steam.url");
             File.WriteAllText(steamLink, "[InternetShortcut]\nURL=steam://rungameid/250820");
-            File.WriteAllText(Path.Combine(shared, "Games"), "not a directory");
+            File.WriteAllText(Path.Combine(shared, "VR"), "not a directory");
             var log = new RecordingLog();
             var cleaner = new DesktopCleanupService(log, "", new ApplicationLocation(root, null), commonDesktopPath: shared);
 
