@@ -93,7 +93,7 @@ public sealed class DesktopShortcutOrganizer(
         foreach (var otherLink in Directory.EnumerateFiles(folder).Where(IsShortcut))
         {
             var otherInfo = store.Read(otherLink);
-            if (otherInfo is not null &&
+            if (otherInfo is not null && !store.IsBroken(otherLink, otherInfo) &&
                 (SameShortcut(info, otherInfo) || SameEpsonApp(link, info, otherLink, otherInfo)))
                 return true;
         }
@@ -103,7 +103,8 @@ public sealed class DesktopShortcutOrganizer(
     private static bool SameShortcut(DesktopShortcut first, DesktopShortcut second) =>
         !string.IsNullOrWhiteSpace(first.Target) &&
         string.Equals(first.Target.Trim().Trim('"'), second.Target.Trim().Trim('"'), StringComparison.OrdinalIgnoreCase) &&
-        string.Equals(first.Arguments.Trim(), second.Arguments.Trim(), StringComparison.OrdinalIgnoreCase);
+        string.Equals(first.Arguments.Trim(), second.Arguments.Trim(), StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(first.WorkingDirectory.Trim(), second.WorkingDirectory.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static bool SameEpsonApp(string firstPath, DesktopShortcut first, string secondPath, DesktopShortcut second)
     {
@@ -117,7 +118,11 @@ public sealed class DesktopShortcutOrganizer(
                  executable.Equals("EpsonPhotoPlus.exe", StringComparison.OrdinalIgnoreCase));
         }
 
-        return IsEpson(firstPath, first) && IsEpson(secondPath, second);
+        if (!IsEpson(firstPath, first) || !IsEpson(secondPath, second)) return false;
+        var firstDirectory = first.Target.Replace('\\', '/');
+        var secondDirectory = second.Target.Replace('\\', '/');
+        return string.Equals(firstDirectory[..firstDirectory.LastIndexOf('/')],
+            secondDirectory[..secondDirectory.LastIndexOf('/')], StringComparison.OrdinalIgnoreCase);
     }
 
     public int DeduplicateGroup(string desktop, string category, string destination)
@@ -134,7 +139,14 @@ public sealed class DesktopShortcutOrganizer(
             {
                 var info = store.Read(link);
                 if (info is null) return;
-                if (seen.Any(previous => SameShortcut(info, previous.Info) ||
+                if (store.IsBroken(link, info))
+                {
+                    // Never prefer a stale launcher over a working one.
+                    // Keep the normal broken-shortcut cleanup semantics.
+                    var quarantine = new DeletionQuarantine(destination).MoveFile(link);
+                    log.WriteLine($"Битый ярлык помещён в корзину: «{link}» → «{quarantine}».");
+                }
+                else if (seen.Any(previous => SameShortcut(info, previous.Info) ||
                     SameEpsonApp(link, info, previous.Path, previous.Info)))
                 {
                     var quarantinedPath = new DeletionQuarantine(destination).MoveFile(link);

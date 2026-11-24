@@ -105,6 +105,58 @@ public sealed class DesktopShortcutDeduplicationTests : IDisposable
         Assert.Single(Directory.GetFiles(Path.Combine(desktop, "VR"), "*.lnk"));
     }
 
+    [Fact]
+    public void Same_executable_and_arguments_with_different_working_folders_are_not_duplicates()
+    {
+        var desktop = Directory.CreateDirectory(Path.Combine(_root, "Desktop")).FullName;
+        var group = Directory.CreateDirectory(Path.Combine(desktop, "Development")).FullName;
+        var sorted = Directory.CreateDirectory(Path.Combine(_root, "Sorted")).FullName;
+        File.WriteAllText(Path.Combine(group, "Project A.lnk"), "a");
+        File.WriteAllText(Path.Combine(group, "Project B.lnk"), "b");
+        var organizer = new DesktopShortcutOrganizer(new WorkingDirectoryStore(), new SilentLog());
+
+        Assert.Equal(0, organizer.DeduplicateGroup(desktop, "Development", sorted));
+
+        Assert.Equal(2, Directory.GetFiles(group, "*.lnk").Length);
+        Assert.False(Directory.Exists(Path.Combine(sorted, "_ToDelete")));
+    }
+
+    [Fact]
+    public void Working_replacement_for_a_broken_epson_shortcut_is_preserved()
+    {
+        var desktop = Directory.CreateDirectory(Path.Combine(_root, "Desktop")).FullName;
+        var photo = Directory.CreateDirectory(Path.Combine(desktop, "PhotoEditors")).FullName;
+        var sorted = Directory.CreateDirectory(Path.Combine(_root, "Sorted")).FullName;
+        var stale = Path.Combine(photo, "Epson Photo+.lnk");
+        File.WriteAllText(stale, @"C:\Epson\EPPlus.exe");
+        var replacement = Path.Combine(desktop, "Epson Photo+ new.lnk");
+        File.WriteAllText(replacement, @"C:\Epson\Epson Photo+.exe");
+        var organizer = new DesktopShortcutOrganizer(new BrokenEpsonStore(), new SilentLog());
+
+        var grouped = organizer.Group(desktop, Path.Combine(_root, "Source"), sorted, [replacement]);
+        var errors = organizer.DeduplicateGroup(desktop, "PhotoEditors", sorted);
+
+        Assert.Equal(1, grouped.Moved);
+        Assert.Equal(0, errors);
+        Assert.True(File.Exists(Path.Combine(photo, "Epson Photo+ new.lnk")));
+        Assert.False(File.Exists(stale));
+        Assert.True(File.Exists(Path.Combine(sorted, "_ToDelete", "Epson Photo+.lnk")));
+    }
+
+    private sealed class WorkingDirectoryStore : IDesktopShortcutStore
+    {
+        public DesktopShortcut Read(string path) => new(@"C:\Apps\Code.exe", ".", Path.GetFileNameWithoutExtension(path));
+        public void CreateFolderLink(string path, string targetDirectory) => File.WriteAllText(path, targetDirectory);
+    }
+
+    private sealed class BrokenEpsonStore : IDesktopShortcutStore
+    {
+        public DesktopShortcut Read(string path) => new(File.ReadAllText(path));
+        public bool IsBroken(string path, DesktopShortcut shortcut) =>
+            Path.GetFileName(path).Equals("Epson Photo+.lnk", StringComparison.OrdinalIgnoreCase);
+        public void CreateFolderLink(string path, string targetDirectory) => File.WriteAllText(path, targetDirectory);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
