@@ -49,7 +49,7 @@ public sealed class DesktopShortcutOrganizer(
                     return;
                 }
 
-                var category = DesktopShortcutClassifier.GetFolder(info);
+                var category = DesktopShortcutClassifier.GetFolder(info, Path.GetFileNameWithoutExtension(link));
                 if (category is null)
                     return;
 
