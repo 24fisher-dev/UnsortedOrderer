@@ -37,6 +37,55 @@ jobs:
           if ([version]$embeddedVersion -ne [version]$filenameVersion) {
             throw "Embedded version $embeddedVersion differs from filename version $filenameVersion"
           }
+          # Read the RT_MANIFEST resource from the published executable, not
+          # just app.manifest from the source tree. The final single-file EXE
+          # must trigger UAC before the WinForms window is created.
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          $mt = Get-ChildItem -Path $sdkRoot -Filter mt.exe -Recurse -ErrorAction Stop |
+            Where-Object { $_.DirectoryName -match '[\\/]x64
+      - name: Upload Windows x64 build from main
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnsortedOrderer-win-x64
+          path: ${{ runner.temp }}/unsortedorderer-publish/*.exe
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: UnsortedOrderer-win-x64
+          path: release-package
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/publish-release.sh release-package
+ } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $mt) { throw 'Windows SDK mt.exe not found' }
+          $extractedManifest = Join-Path $env:RUNNER_TEMP 'published-app.manifest'
+          & $mt.FullName "-inputresource:$($files[0].FullName);#1" "-out:$extractedManifest"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $extractedManifest)) {
+            throw 'Cannot extract RT_MANIFEST from published executable'
+          }
+          [xml]$manifest = Get-Content -Raw -LiteralPath $extractedManifest
+          $ns = New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
+          $ns.AddNamespace('asmv3', 'urn:schemas-microsoft-com:asm.v3')
+          $level = $manifest.SelectSingleNode('//asmv3:requestedExecutionLevel', $ns)
+          if (-not $level -or $level.level -ne 'requireAdministrator' -or $level.uiAccess -ne 'false') {
+            throw "Published EXE does not request requireAdministrator with uiAccess=false"
+          }
       - name: Upload Windows x64 build from main
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
