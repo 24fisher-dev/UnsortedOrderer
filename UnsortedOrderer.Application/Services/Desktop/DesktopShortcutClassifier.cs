@@ -7,6 +7,12 @@ public static class DesktopShortcutClassifier
     public const string GamesFolder = "Games";
     public const string EditorsFolder = "PhotoEditors";
     public const string UtilitiesFolder = "Utilities";
+    public const string MusicFolder = "Music";
+    public const string VrFolder = "VR";
+    public const string DevelopmentFolder = "Development";
+    public const string BrowsersFolder = "Browsers";
+    public const string CommunicationFolder = "Communication";
+    public const string PrintingFolder = "3DPrinting";
 
     private static readonly HashSet<string> UtilityExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -34,6 +40,44 @@ public static class DesktopShortcutClassifier
         "epplus.exe", "epsonphotoplus.exe", "epson photo+.exe", "photolab.exe", "aseprite.exe", "clipstudiopaint.exe", "figma.exe", "luminarneo.exe", "xnview.exe", "xnviewmp.exe"
     };
 
+    private static readonly HashSet<string> VrExecutables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "vrmonitor.exe", "steamvr.exe", "vrcompositor.exe", "vrserver.exe",
+        "oculusclient.exe", "oculusdash.exe", "metahorizonlink.exe", "virtualdesktop.streamer.exe",
+        "virtualdesktop.streamer", "pimaxplay.exe", "pimaxclient.exe", "viveconsole.exe",
+        "sidequest.exe", "qloader.exe", "alvr_dashboard.exe"
+    };
+    private static readonly HashSet<string> MusicExecutables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "spotify.exe", "foobar2000.exe", "aimp.exe", "musicbee.exe", "winamp.exe",
+        "reaper.exe", "ableton live.exe", "fl64.exe", "fl.exe", "cubase.exe",
+        "studio one.exe", "audacity.exe", "guitarpro.exe", "guitar pro 8.exe",
+        "vlc.exe"
+    };
+    private static readonly HashSet<string> DevelopmentExecutables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "code.exe", "codium.exe", "devenv.exe", "rider64.exe", "rider.exe",
+        "idea64.exe", "pycharm64.exe", "webstorm64.exe", "datagrip64.exe",
+        "postman.exe", "insomnia.exe", "gitkraken.exe", "sourcetree.exe",
+        "githubdesktop.exe", "docker desktop.exe", "dbeaver.exe"
+    };
+    private static readonly HashSet<string> BrowserExecutables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "chrome.exe", "firefox.exe", "msedge.exe", "brave.exe", "opera.exe",
+        "vivaldi.exe", "browser.exe"
+    };
+    private static readonly HashSet<string> CommunicationExecutables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "telegram.exe", "discord.exe", "slack.exe", "teams.exe", "zoom.exe",
+        "signal.exe", "whatsapp.exe", "element.exe"
+    };
+    private static readonly HashSet<string> PrintingExecutables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bambu-studio.exe", "bambustudio.exe", "orca-slicer.exe", "orcaslicer.exe",
+        "prusaslicer.exe", "cura.exe", "ultimakercura.exe", "lycheeslicer.exe",
+        "chitubox.exe"
+    };
+
     private static readonly string[] GameSchemes = [
         "steam://", "com.epicgames.launcher://", "uplay://", "ubisoftconnect://", "origin://",
         "origin2://", "eaapp://", "link2ea://", "goggalaxy://", "battlenet://", "ms-xbox:", "xbox:", "ms-gamingoverlay:"];
@@ -53,6 +97,22 @@ public static class DesktopShortcutClassifier
         var isExecutable = !target.Contains("://", StringComparison.Ordinal) &&
             executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
         var launchValue = isExecutable && IsLauncher(executable) ? arguments : target;
+
+        // VR launchers must not be swallowed by the broader Games category.
+        if (isExecutable && VrExecutables.Contains(executable) ||
+            launchValue.StartsWith("steam://run/250820", StringComparison.OrdinalIgnoreCase))
+            return VrFolder;
+
+        if (isExecutable && MusicExecutables.Contains(executable))
+            return MusicFolder;
+        if (isExecutable && DevelopmentExecutables.Contains(executable))
+            return DevelopmentFolder;
+        if (isExecutable && BrowsersExecutablesMatch(executable, target))
+            return BrowsersFolder;
+        if (isExecutable && CommunicationExecutables.Contains(executable))
+            return CommunicationFolder;
+        if (isExecutable && PrintingExecutables.Contains(executable))
+            return PrintingFolder;
 
         if (GameSchemes.Any(scheme => launchValue.StartsWith(scheme, StringComparison.OrdinalIgnoreCase)) ||
             IsStoreApp(launchValue, GameAppIds) || isExecutable && (GameExecutables.Contains(executable) || DesktopShortcutCatalog.Games.Contains(executable)))
@@ -76,6 +136,11 @@ public static class DesktopShortcutClassifier
                 workingDirectory.Contains(directory, StringComparison.OrdinalIgnoreCase))
             ? GamesFolder : null;
     }
+
+    private static bool BrowsersExecutablesMatch(string executable, string target) =>
+        BrowserExecutables.Contains(executable) &&
+        (!executable.Equals("browser.exe", StringComparison.OrdinalIgnoreCase) ||
+            target.Contains("/Browser/", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsKnownEditorPath(string executable, string target) =>
         !(executable.Equals("photo.exe", StringComparison.OrdinalIgnoreCase) ||

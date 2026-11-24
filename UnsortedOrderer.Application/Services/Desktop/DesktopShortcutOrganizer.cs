@@ -11,7 +11,13 @@ public sealed class DesktopShortcutOrganizer(
     internal static bool IsGroupFolder(string name) =>
         name.Equals(DesktopShortcutClassifier.GamesFolder, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(DesktopShortcutClassifier.EditorsFolder, StringComparison.OrdinalIgnoreCase) ||
-        name.Equals(DesktopShortcutClassifier.UtilitiesFolder, StringComparison.OrdinalIgnoreCase);
+        name.Equals(DesktopShortcutClassifier.UtilitiesFolder, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(DesktopShortcutClassifier.MusicFolder, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(DesktopShortcutClassifier.VrFolder, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(DesktopShortcutClassifier.DevelopmentFolder, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(DesktopShortcutClassifier.BrowsersFolder, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(DesktopShortcutClassifier.CommunicationFolder, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(DesktopShortcutClassifier.PrintingFolder, StringComparison.OrdinalIgnoreCase);
 
     public (int Moved, int Quarantined, int Left, int Errors) Group(string desktop, string source, string? destination, IEnumerable<string> links)
     {
