@@ -105,6 +105,18 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         // A shared shortcut can point to an entry on the personal desktop or vice versa.
         var shortcutResults = roots.Select(root => _shortcuts.Group(root.Path, unsortedPath, sortedPath,
             root.Entries.Where(IsShortcut).Select(entry => entry.FullName), categoryDesktop)).ToArray();
+        if (categoryDesktop is not null && sortedPath is not null)
+        {
+            foreach (var category in new[] { DesktopShortcutClassifier.EditorsFolder, DesktopShortcutClassifier.VrFolder })
+            {
+                try { errors += _shortcuts.DeduplicateGroup(categoryDesktop, category, sortedPath); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    errors++;
+                    _messageWriter.WriteLine($"Не удалось проверить дубли ярлыков «{category}»: {ex.Message}");
+                }
+            }
+        }
 
         for (var i = 0; i < roots.Count; i++)
         {
@@ -191,8 +203,8 @@ public sealed class DesktopCleanupService : IDesktopCleanupService
         if (!CanClean(unsortedPath) || ApplicationLocation.ContainsPath(sortedPath, _desktopPath))
             return;
 
-        _shortcuts.EnsureFolderLink(_desktopPath, "Unsorted", unsortedPath);
-        _shortcuts.EnsureFolderLink(_desktopPath, "Sorted", sortedPath);
+        _shortcuts.EnsureFolderLink(_desktopPath, "Unsorted", unsortedPath, _commonDesktopPath, sortedPath);
+        _shortcuts.EnsureFolderLink(_desktopPath, "Sorted", sortedPath, _commonDesktopPath, sortedPath);
     }
 
     private static bool IsShortcut(FileSystemInfo entry) =>

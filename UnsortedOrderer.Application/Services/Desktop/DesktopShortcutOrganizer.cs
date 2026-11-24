@@ -61,6 +61,17 @@ public sealed class DesktopShortcutOrganizer(
                     Directory.Exists(folder) && (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
                     throw new IOException($"Нет безопасной папки для группы «{folder}».");
 
+                if (Directory.Exists(folder) && IsDuplicateInFolder(link, info, folder))
+                {
+                    if (destination is not null)
+                    {
+                        var quarantinedPath = new DeletionQuarantine(destination).MoveFile(link);
+                        movedToTrash = true;
+                        log.WriteLine($"Дублирующийся ярлык помещён в корзину: «{link}» → «{quarantinedPath}».");
+                    }
+                    return;
+                }
+
                 _moveFile(link, folder);
                 didMove = true;
                 log.WriteLine($"Ярлык перенесён в {category}: «{link}».");
@@ -77,25 +88,102 @@ public sealed class DesktopShortcutOrganizer(
         return (moved, quarantined, left, errors);
     }
 
-    public void EnsureFolderLink(string desktop, string name, string target)
+    private bool IsDuplicateInFolder(string link, DesktopShortcut info, string folder)
+    {
+        foreach (var otherLink in Directory.EnumerateFiles(folder).Where(IsShortcut))
+        {
+            var otherInfo = store.Read(otherLink);
+            if (otherInfo is not null &&
+                (SameShortcut(info, otherInfo) || SameEpsonApp(link, info, otherLink, otherInfo)))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool SameShortcut(DesktopShortcut first, DesktopShortcut second) =>
+        !string.IsNullOrWhiteSpace(first.Target) &&
+        string.Equals(first.Target.Trim().Trim('"'), second.Target.Trim().Trim('"'), StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(first.Arguments.Trim(), second.Arguments.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool SameEpsonApp(string firstPath, DesktopShortcut first, string secondPath, DesktopShortcut second)
+    {
+        static bool IsEpson(string link, DesktopShortcut info)
+        {
+            var label = Path.GetFileNameWithoutExtension(link);
+            var executable = Path.GetFileName(info.Target.Replace('\\', '/'));
+            return label.StartsWith("Epson Photo+", StringComparison.OrdinalIgnoreCase) &&
+                (executable.Equals("EPPlus.exe", StringComparison.OrdinalIgnoreCase) ||
+                 executable.Equals("Epson Photo+.exe", StringComparison.OrdinalIgnoreCase) ||
+                 executable.Equals("EpsonPhotoPlus.exe", StringComparison.OrdinalIgnoreCase));
+        }
+
+        return IsEpson(firstPath, first) && IsEpson(secondPath, second);
+    }
+
+    public int DeduplicateGroup(string desktop, string category, string destination)
+    {
+        var folder = Path.Combine(desktop, category);
+        if (!Directory.Exists(folder) || (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
+            return 0;
+
+        var seen = new List<(string Path, DesktopShortcut Info)>();
+        var errors = 0;
+        foreach (var link in Directory.EnumerateFiles(folder).Where(IsShortcut).ToArray())
+        {
+            if (!TryShortcutOperation(link, () =>
+            {
+                var info = store.Read(link);
+                if (info is null) return;
+                if (seen.Any(previous => SameShortcut(info, previous.Info) ||
+                    SameEpsonApp(link, info, previous.Path, previous.Info)))
+                {
+                    var quarantinedPath = new DeletionQuarantine(destination).MoveFile(link);
+                    log.WriteLine($"Дублирующийся ярлык помещён в корзину: «{link}» → «{quarantinedPath}».");
+                }
+                else seen.Add((link, info));
+            }))
+                errors++;
+        }
+        return errors;
+    }
+
+    public void EnsureFolderLink(string desktop, string name, string target, string? commonDesktop = null, string? quarantineRoot = null)
     {
         if (!Directory.Exists(target))
             return;
 
         target = Path.GetFullPath(target);
-        foreach (var file in Directory.EnumerateFiles(desktop).Where(IsWindowsShortcut))
+        var matching = new List<string>();
+        foreach (var root in new[] { desktop, commonDesktop }
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var found = false;
-            TryShortcutOperation(file, () =>
+            foreach (var file in Directory.EnumerateFiles(root!).Where(IsWindowsShortcut))
             {
-                if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
-                    return;
-                var info = store.Read(file);
-                found = info is not null && string.IsNullOrEmpty(info.Arguments) &&
-                    Path.IsPathFullyQualified(info.Target) && ApplicationLocation.SamePath(info.Target, target);
-            });
-            if (found)
-                return;
+                TryShortcutOperation(file, () =>
+                {
+                    if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                        return;
+                    var info = store.Read(file);
+                    if (info is not null && string.IsNullOrEmpty(info.Arguments) &&
+                        Path.IsPathFullyQualified(info.Target) && ApplicationLocation.SamePath(info.Target, target))
+                        matching.Add(file);
+                });
+            }
+        }
+
+        if (matching.Count > 0)
+        {
+            // Windows overlays personal and common desktop folders. Reuse the first
+            // working shortcut and quarantine additional links to the exact same target.
+            foreach (var duplicate in matching.Skip(1))
+                if (quarantineRoot is not null)
+                    TryShortcutOperation(duplicate, () =>
+                    {
+                        var saved = new DeletionQuarantine(quarantineRoot).MoveFile(duplicate);
+                        log.WriteLine($"Дублирующийся ярлык {name} помещён в корзину: «{duplicate}» → «{saved}».");
+                    });
+            return;
         }
 
         var link = Path.Combine(desktop, name + ".lnk");

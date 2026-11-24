@@ -66,6 +66,17 @@ public sealed class ReportedDesktopShortcutTests
         Assert.Equal(expected, DesktopShortcutClassifier.GetFolder(new DesktopShortcut(target, arguments), label));
     }
 
+    [Theory]
+    [InlineData("QLoader", @"C:\VR\Launch.exe", "VR")]
+    [InlineData("Lightroom Portable.exe — ярлык", @"D:\Portable\Lightroom\Run.exe", "PhotoEditors")]
+    [InlineData("Epson Photo+", @"C:\Epson\Launcher.exe", "PhotoEditors")]
+    [InlineData("Autodesk Fusion", @"C:\Autodesk\Fusion\Launcher.exe", "3DPrinting")]
+    [InlineData("QLoader", @"C:\Photos\QLoader.jpg", null)]
+    public void Screenshot_labels_sort_known_wrappers_only_for_app_links(string name, string target, string? expected)
+    {
+        Assert.Equal(expected, DesktopShortcutClassifier.GetFolder(new DesktopShortcut(target), name));
+    }
+
     [Fact]
     public void Shell_link_with_no_readable_target_is_not_moved_by_guessing()
     {
