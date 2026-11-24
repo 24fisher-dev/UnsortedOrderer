@@ -52,7 +52,8 @@ public static class DesktopShortcutClassifier
         "spotify.exe", "foobar2000.exe", "aimp.exe", "musicbee.exe", "winamp.exe",
         "reaper.exe", "ableton live.exe", "fl64.exe", "fl.exe", "cubase.exe",
         "studio one.exe", "audacity.exe", "guitarpro.exe", "guitar pro 8.exe",
-        "vlc.exe"
+        "vlc.exe", "guitarpro.exe", "яндекс музыка.exe", "moises.exe",
+        "prime studio for m2.exe"
     };
     private static readonly HashSet<string> DevelopmentExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -64,7 +65,7 @@ public static class DesktopShortcutClassifier
     private static readonly HashSet<string> BrowserExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
         "chrome.exe", "firefox.exe", "msedge.exe", "brave.exe", "opera.exe",
-        "vivaldi.exe", "browser.exe"
+        "vivaldi.exe"
     };
     private static readonly HashSet<string> CommunicationExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -75,7 +76,7 @@ public static class DesktopShortcutClassifier
     {
         "bambu-studio.exe", "bambustudio.exe", "orca-slicer.exe", "orcaslicer.exe",
         "prusaslicer.exe", "cura.exe", "ultimakercura.exe", "lycheeslicer.exe",
-        "chitubox.exe"
+        "chitubox.exe", "fusion360.exe"
     };
 
     private static readonly string[] GameSchemes = [
@@ -100,7 +101,8 @@ public static class DesktopShortcutClassifier
 
         // VR launchers must not be swallowed by the broader Games category.
         if (isExecutable && VrExecutables.Contains(executable) ||
-            launchValue.StartsWith("steam://run/250820", StringComparison.OrdinalIgnoreCase))
+            launchValue.StartsWith("steam://run/250820", StringComparison.OrdinalIgnoreCase) ||
+            launchValue.StartsWith("steam://rungameid/250820", StringComparison.OrdinalIgnoreCase))
             return VrFolder;
 
         if (isExecutable && MusicExecutables.Contains(executable))
