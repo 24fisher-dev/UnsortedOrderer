@@ -404,6 +404,44 @@ public class DesktopCleanupServiceTests
         Assert.True(File.Exists(Path.Combine(sharedGames, "Original.lnk")));
     }
 
+    [Fact]
+    public void Category_holding_running_application_is_not_consolidated()
+    {
+        using var root = new TestFolder();
+        var personal = Directory.CreateDirectory(Path.Combine(root.Path, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root.Path, "Public")).FullName;
+        var portable = Directory.CreateDirectory(Path.Combine(shared, "Games (1)", "Current")).FullName;
+        var exe = Path.Combine(portable, "UnsortedOrderer.exe");
+        File.WriteAllText(exe, "running");
+        var cleaner = new DesktopCleanupService(new RecordingLog(), personal,
+            new ApplicationLocation(portable, exe), new TestShortcutStore(new Dictionary<string, string>()),
+            commonDesktopPath: shared);
+        Assert.Equal(0, cleaner.CleanSelected(Path.Combine(root.Path, "Unsorted"),
+            Path.Combine(root.Path, "Sorted"), personal: true, common: true));
+        Assert.Equal("running", File.ReadAllText(exe));
+        Assert.True(Directory.Exists(Path.Combine(shared, "Games (1)")));
+    }
+
+    [Fact]
+    public void Category_referenced_by_shortcut_is_preserved_to_avoid_breaking_link()
+    {
+        using var root = new TestFolder();
+        var personal = Directory.CreateDirectory(Path.Combine(root.Path, "Personal")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root.Path, "Public")).FullName;
+        var legacy = Directory.CreateDirectory(Path.Combine(shared, "Games (1)")).FullName;
+        File.WriteAllText(Path.Combine(legacy, "Game.lnk"), "game");
+        var reference = Path.Combine(personal, "Old games.lnk");
+        File.WriteAllText(reference, legacy);
+        var store = new LocalFolderShortcutStore();
+        var cleaner = new DesktopCleanupService(new RecordingLog(), personal,
+            new ApplicationLocation(root.Path, null), store, commonDesktopPath: shared);
+        Assert.Equal(0, cleaner.CleanSelected(Path.Combine(root.Path, "Unsorted"),
+            Path.Combine(root.Path, "Sorted"), personal: true, common: true));
+        Assert.True(Directory.Exists(legacy));
+        Assert.True(File.Exists(reference));
+        Assert.True(File.Exists(Path.Combine(legacy, "Game.lnk")));
+    }
+
     private sealed class TestFolder : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N"));

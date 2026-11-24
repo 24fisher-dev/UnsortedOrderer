@@ -39,7 +39,8 @@ public static class DesktopShortcutGroupFolder
     }
 
     public static int Consolidate(IEnumerable<string> selectedDesktops, string preferredDesktop,
-        string unsortedPath, string? sortedPath, IMessageWriter log)
+        string unsortedPath, string? sortedPath, ApplicationLocation application,
+        IReadOnlyCollection<string> shortcutTargets, IMessageWriter log)
     {
         var errors = 0;
         foreach (var desktop in selectedDesktops.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -63,7 +64,9 @@ public static class DesktopShortcutGroupFolder
                     continue;
 
                 var targetFolder = Path.Combine(preferredDesktop, category);
-                if (ApplicationLocation.SamePath(sourceFolder, targetFolder))
+                if (ApplicationLocation.SamePath(sourceFolder, targetFolder) ||
+                    application.ProtectsDirectory(sourceFolder) ||
+                    shortcutTargets.Any(target => ApplicationLocation.ContainsPath(sourceFolder, target)))
                     continue;
 
                 // Never walk into junctions, symlinks or the configured sorting roots.
@@ -86,12 +89,15 @@ public static class DesktopShortcutGroupFolder
                     // target category after a no-op, or duplicate folders after repeated runs.
                     foreach (var entry in new DirectoryInfo(sourceFolder).EnumerateFileSystemInfos())
                     {
+                        if (application.ProtectsFile(entry.FullName) ||
+                            entry is DirectoryInfo && application.ProtectsDirectory(entry.FullName))
+                            throw new IOException($"Нельзя переместить работающую программу или её настройки: {entry.FullName}");
                         Directory.CreateDirectory(targetFolder);
                         var target = Path.Combine(targetFolder, entry.Name);
                         if (entry is DirectoryInfo)
                         {
                             target = FileUtilities.GetUniqueDirectoryPath(targetFolder, entry.Name);
-                            Directory.Move(entry.FullName, target);
+                            DirectoryTransfer.Move(entry.FullName, target);
                         }
                         else
                         {

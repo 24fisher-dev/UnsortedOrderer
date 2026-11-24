@@ -79,6 +79,8 @@ public static class DesktopShortcutClassifier
         "chitubox.exe", "fusion360.exe"
     };
 
+    private static readonly string[] CommunicationWebDomains = ["telemost.yandex.ru"];
+
     private static readonly string[] GameSchemes = [
         "steam://", "com.epicgames.launcher://", "uplay://", "ubisoftconnect://", "origin://",
         "origin2://", "eaapp://", "link2ea://", "goggalaxy://", "battlenet://", "ms-xbox:", "xbox:", "ms-gamingoverlay:"];
@@ -111,7 +113,10 @@ public static class DesktopShortcutClassifier
             return DevelopmentFolder;
         if (isExecutable && BrowsersExecutablesMatch(executable, target))
             return BrowsersFolder;
-        if (isExecutable && CommunicationExecutables.Contains(executable))
+        if (isExecutable && CommunicationExecutables.Contains(executable) ||
+            Uri.TryCreate(launchValue, UriKind.Absolute, out var communicationUri) &&
+            (communicationUri.Scheme == Uri.UriSchemeHttp || communicationUri.Scheme == Uri.UriSchemeHttps) &&
+            CommunicationWebDomains.Any(domain => communicationUri.Host.Equals(domain, StringComparison.OrdinalIgnoreCase)))
             return CommunicationFolder;
         if (isExecutable && PrintingExecutables.Contains(executable))
             return PrintingFolder;
