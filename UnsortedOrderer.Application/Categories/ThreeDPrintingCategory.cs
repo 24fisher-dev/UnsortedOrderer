@@ -9,8 +9,16 @@ public sealed class ThreeDPrintingCategory : FileCategory, INonSplittableDirecto
 {
     private static readonly HashSet<string> ProjectSidecars = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".png", ".jpg", ".jpeg", ".webp", ".txt", ".md", ".pdf", ".json",
-        ".xml", ".ini", ".cfg", ".conf", ".zip", ".7z", ".rar"
+        ".png", ".jpg", ".jpeg", ".webp", ".heic", ".tif", ".tiff", ".bmp",
+        ".txt", ".md", ".pdf", ".json", ".xml", ".ini", ".cfg", ".conf",
+        ".zip", ".7z", ".rar"
+    };
+
+    // Windows often creates these hidden files inside a model/project folder.
+    // They must not cause photos and printable models to be split apart.
+    private static readonly HashSet<string> FolderMetadata = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "desktop.ini", "thumbs.db", ".ds_store"
     };
 
     public ThreeDPrintingCategory()
@@ -57,6 +65,8 @@ public sealed class ThreeDPrintingCategory : FileCategory, INonSplittableDirecto
                 }
 
                 var extension = Path.GetExtension(entry.Name);
+                if (FolderMetadata.Contains(entry.Name))
+                    continue;
                 if (!Matches(extension) && !ProjectSidecars.Contains(extension))
                     return false;
                 allFiles++;
