@@ -285,6 +285,121 @@ public partial class FileOrganizerServiceTests
         Assert.True(File.Exists(archiveDestination));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Mixed_3d_printing_project_with_model_photos_moves_as_one_folder(bool includeWindowsMetadata)
+    {
+        using var source = new TempDirectory();
+        using var destination = new TempDirectory();
+
+        var projectName = "A4Tech KR-85 legs";
+        var project = Path.Combine(source.Path, projectName);
+        Directory.CreateDirectory(project);
+        var files = new Dictionary<string, string>
+        {
+            ["KR85_pair.3mf"] = "project-file",
+            ["KR85_pair.stl"] = "print-model",
+            ["photo_2026-11-25_13-02-16.jpg"] = "photo-1",
+            ["photo_2026-11-25_13-02-23.jpg"] = "photo-2",
+            ["photo_2026-11-25_13-05-59.jpg"] = "photo-3",
+            ["photo_2026-11-25_13-38-30.jpg"] = "photo-4",
+            ["Деталь ножки.png"] = "preview",
+            ["Вид снизу.png"] = "render"
+        };
+        if (includeWindowsMetadata)
+        {
+            files["desktop.ini"] = "system metadata";
+            files["Thumbs.db"] = "thumbnail cache";
+        }
+        foreach (var file in files)
+            File.WriteAllText(Path.Combine(project, file.Key), file.Value);
+
+        var model = Path.Combine(project, "KR85_pair.3mf");
+        var date = File.GetCreationTime(model);
+        var settings = CreatePrintingSettings(source.Path, destination.Path);
+        var categories = new ICategory[]
+        {
+            new ThreeDPrintingCategory(),
+            new UnknownCategory(settings.UnknownFolderName)
+        };
+        var organizer = CreatePrintingOrganizer(settings, categories);
+
+        Assert.Equal(0, organizer.Organize());
+
+        var movedProject = Path.Combine(destination.Path, "3DPrinting",
+            date.ToString("yyyy"), date.ToString("MM"), projectName);
+        Assert.True(Directory.Exists(movedProject));
+        Assert.False(Directory.Exists(project));
+        Assert.Equal(files.Keys.OrderBy(x => x), Directory.GetFiles(movedProject)
+            .Select(Path.GetFileName).OrderBy(x => x));
+        foreach (var file in files)
+            Assert.Equal(file.Value, File.ReadAllText(Path.Combine(movedProject, file.Key)));
+        Assert.False(Directory.Exists(Path.Combine(destination.Path, "Photos")));
+        Assert.False(Directory.Exists(Path.Combine(destination.Path, "Images")));
+    }
+
+    [Fact]
+    public void Printing_project_does_not_swallow_unrelated_installer_or_parent_folder()
+    {
+        using var source = new TempDirectory();
+        using var destination = new TempDirectory();
+        var parent = Path.Combine(source.Path, "Mixed");
+        var project = Path.Combine(parent, "A4Tech KR-85 legs");
+        Directory.CreateDirectory(project);
+        File.WriteAllText(Path.Combine(project, "part.stl"), "model");
+        File.WriteAllText(Path.Combine(project, "photo.jpg"), "photo");
+        File.WriteAllText(Path.Combine(parent, "installer.exe"), "different app");
+        var printing = new ThreeDPrintingCategory();
+        Assert.True(printing.IsNonSplittableDirectory(project));
+        Assert.False(printing.IsNonSplittableDirectory(parent));
+
+        File.WriteAllText(Path.Combine(project, "installer.exe"), "not part of a print");
+        Assert.False(printing.IsNonSplittableDirectory(project));
+    }
+
+    [Fact]
+    public void Printing_project_with_an_existing_destination_does_not_overwrite_old_project()
+    {
+        using var source = new TempDirectory();
+        using var destination = new TempDirectory();
+        var project = Path.Combine(source.Path, "A4Tech KR-85 legs");
+        Directory.CreateDirectory(project);
+        var model = Path.Combine(project, "part.3mf");
+        File.WriteAllText(model, "new model");
+        File.WriteAllText(Path.Combine(project, "photo.png"), "new photo");
+        var date = File.GetCreationTime(model);
+        var destinationMonth = Path.Combine(destination.Path, "3DPrinting", date.ToString("yyyy"), date.ToString("MM"));
+        var existingProject = Path.Combine(destinationMonth, "A4Tech KR-85 legs");
+        Directory.CreateDirectory(existingProject);
+        File.WriteAllText(Path.Combine(existingProject, "part.3mf"), "old model");
+
+        var settings = CreatePrintingSettings(source.Path, destination.Path);
+        var organizer = CreatePrintingOrganizer(settings, [new ThreeDPrintingCategory(), new UnknownCategory(settings.UnknownFolderName)]);
+        Assert.Equal(0, organizer.Organize());
+
+        Assert.Equal("old model", File.ReadAllText(Path.Combine(existingProject, "part.3mf")));
+        var newProject = Path.Combine(destinationMonth, "A4Tech KR-85 legs(1)");
+        Assert.Equal("new model", File.ReadAllText(Path.Combine(newProject, "part.3mf")));
+        Assert.Equal("new photo", File.ReadAllText(Path.Combine(newProject, "photo.png")));
+    }
+
+    private static AppSettings CreatePrintingSettings(string source, string destination) =>
+        new(source, destination, softFolderName: "Soft", archiveFolderName: "Archives",
+            imagesFolderName: "Images", photosFolderName: "Photos",
+            musicFolderName: "Music", musicalInstrumentsFolderName: "Instruments",
+            eBooksFolderName: "EBooks", repositoriesFolderName: "Repositories",
+            driversFolderName: "Drivers", firmwareFolderName: "Firmware",
+            metadataFolderName: "Metadata", webFolderName: "Web", graphicsFolderName: "Graphics",
+            unknownFolderName: "Unknown", deletedExtensions: [],
+            documentImageKeywords: [], cameraFileNamePatterns: [],
+            softwareArchiveKeywords: []);
+
+    private static FileOrganizerService CreatePrintingOrganizer(AppSettings settings, ICategory[] categories) =>
+        new(settings, new StubArchiveService(), new StubPhotoService(isPhoto: true),
+            new StubMessengerPathService(), categories, [],
+            new RecordingStatisticsService(), new StubMessageWriter());
+
     private static void InvokeProcessFile(FileOrganizerService organizer, string filePath)
     {
         var method = typeof(FileOrganizerService)

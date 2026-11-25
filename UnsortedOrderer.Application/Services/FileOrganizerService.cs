@@ -121,8 +121,14 @@ public sealed class FileOrganizerService
         if (ShouldSkipDirectory(subDirectory))
             return;
 
-        var nonSplittableCategory = _nonSplittableCategories
-            .FirstOrDefault(category => category.IsNonSplittableDirectory(subDirectory));
+        // A folder with printable models and their photos is one project, even
+        // when another detector sees a subset of its contents. Check its
+        // conservative full-content probe before the more generic categories.
+        INonSplittableDirectoryCategory? nonSplittableCategory =
+            _printingCategory?.IsNonSplittableDirectory(subDirectory) == true
+                ? _printingCategory
+                : _nonSplittableCategories.FirstOrDefault(category =>
+                    category.IsNonSplittableDirectory(subDirectory));
 
         if (nonSplittableCategory is not null)
         {
